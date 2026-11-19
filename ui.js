@@ -244,7 +244,7 @@
         }
         case 'jammed':
           addLog(ev.player === 0
-            ? 'Software Bug! Your guns are offline this turn. Use a free-action card if you like, then end your turn.'
+            ? 'Software Bug! Your guns are offline this turn. You can still play one utility card, then end your turn.'
             : 'The enemy’s guns are jammed by your Software Bug.', ev.player === 0 ? 'you' : 'enemy', true);
           break;
         case 'smoked':
