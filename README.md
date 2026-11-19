@@ -24,30 +24,33 @@ You can also just open `index.html` directly in a browser.
 
 1. **Deploy.** Place your fleet on the 10×10 grid: Carrier (5), Battleship (4), Cruiser (3), Submarine (3), Destroyer (2). Click a ship and then the grid, press <kbd>R</kbd> to rotate, or hit **Randomize**.
 2. **Battle.** Take turns firing at enemy waters. The first player to sink every enemy ship wins.
-3. **Cards.** Both players draw from one **shared deck** of 46 cards (2 copies of each of the 23 cards).
+3. **Cards.** Both players draw from one **shared deck** of 46 cards. Attack and most utility cards have 2 copies; the defensive cards (Field Repair, Full Maintenance, Move, Call for Backup, Rocket Shield, Decoy, Smoke Screen, Scrambler) have 1 copy each, to keep games short.
    - You start with **2 cards** and draw **1 at the start of every turn**. You can hold at most **4**. With a full hand you skip that turn's draw. The discard pile is reshuffled when the deck runs out.
-   - **Single-use cards** (Field Repair, Full Maintenance, Call for Backup) stay in the discard pile once played. They are never reshuffled into the deck and can't be salvaged.
+   - **Single-use cards** (Field Repair, Full Maintenance, Move, Call for Backup) stay in the discard pile once played. They are never reshuffled into the deck and can't be salvaged.
    - **Comeback draw:** when one of your ships is sunk, you draw a bonus card (if you have room).
-4. **A turn** goes in this order, and every step except the shot is optional:
-   1. **One utility card**
-   2. **One attack card**
-   3. **Your regular shot**, which ends the turn.
+4. **A turn:**
+   1. Optionally play **one utility card**.
+   2. Then **either** take your **regular shot**, **or** play **one attack card instead** of it. Either one ends your turn.
 
-   That gives four possible turns: *shot*, *utility + shot*, *attack + shot*, or *utility + attack + shot*. You can't play a utility card after an attack card. Care Package doesn't count toward either limit.
+   Care Package doesn't count toward these limits. Double Salvo gives you two regular shots.
 
 ### Cards
 
 | Card | Type | Effect |
 |---|---|---|
-| Double Salvo | Attack | Take one extra regular shot this turn. |
-| Torpedo | Attack | Launch from any segment of one of your ships, horizontally or vertically. It travels across enemy waters and strikes the first intact enemy segment. Your own ships don't block it. |
+| Double Salvo | Attack | Fire two regular shots this turn. |
+| Chain Shot | Attack | Fire a shot. Every hit earns another shot, up to 3 in total. A miss ends the chain. |
+| Flare Round | Attack | Fire one shot. The 8 cells around it light up, showing which hold a ship (you can then target them) and which are water. |
+| Delayed Barrage | Attack | Target the 4 corners of a 3×3 area. Both players see the 4 cells. You still take your regular shot this turn; the barrage lands at the start of your next turn and is that turn's shot (you can still play a utility card). The enemy gets one turn to move or shield ships there. |
+| Skipping Stone | Attack | Like the Torpedo, pick a row where you have a ship. It hits columns A, C, E, G and I, doesn't stop on a hit, and skims over mines. |
+| Torpedo | Attack | Pick a row number on the enemy grid. You can only choose rows where one of your ships sits, so the enemy learns that row. The torpedo runs the whole row from left to right and strikes the first intact enemy segment (or a mine). |
 | Cluster Bomb | Attack | Strike a plus-shaped area of up to 5 cells. |
 | Rapid Fire | Attack | Choose 4 cells anywhere and fire at all of them. |
 | Parallel Shots | Attack | Fire a straight 3×1 line, horizontal or vertical. |
 | Sonar Ping | Utility | Learn how many intact (unscrambled) ship segments are in a 3×3 area. |
 | Field Repair | Utility | Repair one damaged segment of a ship that's still afloat. **Single use.** |
 | Full Maintenance | Utility | Fully repair one ship that's still afloat. **Single use.** |
-| Move | Utility | Relocate a ship to a hidden position. Its damage moves with it, and the enemy's old markers on it disappear. It can't land on cells the enemy has already marked. |
+| Move | Utility | Relocate a ship to a hidden position. Its damage moves with it, and the enemy's old markers on it disappear. It can't land on cells the enemy has already marked. **Single use.** |
 | Call for Backup | Utility | Deploy an extra 2×1 Patrol Boat. It must also be sunk to win. **Single use.** |
 | Rocket Shield | Utility | One ship ignores all attacks during the enemy's next turn. Blocked shots still reveal that a ship is there. |
 | Scrambler | Utility | Enemy sonar can't detect this ship until it is sunk. |
@@ -63,7 +66,7 @@ You can also just open `index.html` directly in a browser.
 | Follow the Trail | Utility | A trap that stays armed until the enemy next hits one of your real ships. Then one intact segment of a random enemy ship is revealed to you. |
 | Care Package | Free, no limit | Shuffle another card from your hand back into the deck and draw a new one. |
 
-**Shortcuts:** <kbd>1</kbd>–<kbd>4</kbd> pick a card, <kbd>R</kbd> rotates or switches orientation (deployment, Move, Backup, Decoy, Mine Field, Parallel Shots, Recon Flight), and <kbd>Esc</kbd> cancels.
+**Shortcuts:** <kbd>1</kbd>–<kbd>4</kbd> pick a card, <kbd>R</kbd> or the mouse wheel (over the grid) rotates or switches orientation (deployment, Move, Backup, Decoy, Mine Field, Parallel Shots, Recon Flight), and <kbd>Esc</kbd> cancels.
 
 ## Project structure
 

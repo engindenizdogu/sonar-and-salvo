@@ -26,7 +26,7 @@
     <!-- Setup -->
     <section id="setupPanel" class="panel setup-panel" aria-label="Fleet deployment">
       <h2>Deploy your fleet</h2>
-      <p class="hint">Pick a ship, then click your grid to place it. Press <kbd>R</kbd> or use Rotate to turn it. Click a placed ship to pick it back up.</p>
+      <p class="hint">Pick a ship, then click your grid to place it. Press <kbd>R</kbd>, scroll the mouse wheel over the grid, or use Rotate to turn it. Click a placed ship to pick it back up.</p>
       <ul id="shipyard" class="shipyard"></ul>
       <div class="setup-actions">
         <button id="rotateBtn" class="btn">Rotate <kbd>R</kbd></button>
@@ -57,14 +57,6 @@
 
     <!-- Hand of cards -->
     <section id="cardPanel" class="panel card-panel" aria-label="Your hand">
-      <div class="card-head">
-        <h2>Your hand</h2>
-        <div class="deck-info">
-          <span>Deck <b id="deckCount">0</b></span>
-          <span>Discard <b id="discardCount">0</b></span>
-          <span>Enemy hand <b id="enemyHand">0</b></span>
-        </div>
-      </div>
       <div id="hand" class="hand"></div>
       <div class="card-foot">
         <p id="cardHint" class="card-hint"></p>
@@ -79,6 +71,11 @@
     <!-- Log -->
     <section class="panel log-panel" aria-label="Battle log">
       <h2>Battle log</h2>
+      <dl class="game-info" aria-label="Cards">
+        <div><dt>Deck</dt><dd id="deckCount">0</dd></div>
+        <div><dt>Discard</dt><dd id="discardCount">0</dd></div>
+        <div><dt>Enemy hand</dt><dd id="enemyHand">0</dd></div>
+      </dl>
       <ol id="log" class="log"></ol>
     </section>
   </main>

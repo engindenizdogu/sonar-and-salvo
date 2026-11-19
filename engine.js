@@ -21,8 +21,9 @@
 
   /*
    * kind:
-   * A turn is: [one utility card] -> [one attack card] -> your regular shot (which ends the turn).
-   *   attack  -> extra firepower; you still take your regular shot afterwards
+   * A turn is: [one utility card] -> then EITHER one attack card OR your regular shot. Either ends the turn.
+   *   attack  -> replaces your regular shot (Double Salvo = two regular shots;
+   *              Delayed Barrage lands next turn, so you still take your shot)
    *   utility -> must be played before your attack card; one per turn
    *   free    -> doesn't count toward either limit
    *   locked  -> sits in your hand and can't be played (Heavy Cargo)
@@ -42,7 +43,7 @@
     },
     move: {
       name: 'Move', kind: 'utility', icon: '⇄',
-      desc: 'Relocate one of your ships to a new hidden position. Its damage moves with it.',
+      desc: 'Relocate one of your ships to a new hidden position. Its damage moves with it. Single use: stays in the discard pile.',
     },
     backup: {
       name: 'Call for Backup', kind: 'utility', icon: '⚓',
@@ -62,11 +63,11 @@
     },
     double: {
       name: 'Double Salvo', kind: 'attack', icon: '⁑',
-      desc: 'Take one extra regular shot this turn.',
+      desc: 'Fire two regular shots this turn.',
     },
     torpedo: {
       name: 'Torpedo', kind: 'attack', icon: '➤',
-      desc: 'Launch from one of your ships in any straight direction. It strikes the first intact enemy segment in its path.',
+      desc: 'Fire along a row where you have a ship. It runs the whole row and strikes the first intact enemy segment it meets.',
     },
     cluster: {
       name: 'Cluster Bomb', kind: 'attack', icon: '✚',
@@ -120,6 +121,22 @@
       name: 'Follow the Trail', kind: 'utility', icon: '⌕',
       desc: 'Trap: the next time the enemy hits one of your ships, one segment of an enemy ship is revealed.',
     },
+    chain: {
+      name: 'Chain Shot', kind: 'attack', icon: '⛓',
+      desc: 'Fire a shot. Every hit earns another shot, up to 3 in total. A miss ends the chain.',
+    },
+    flare: {
+      name: 'Flare Round', kind: 'attack', icon: '✺',
+      desc: 'Fire one shot. The 8 cells around it light up, showing ship or water (no damage to them).',
+    },
+    barrage: {
+      name: 'Delayed Barrage', kind: 'attack', icon: '⌛', rule: 'Then take your shot',
+      desc: 'Target the 4 corners of a 3×3 area. The enemy sees them. The strike lands at the start of your next turn.',
+    },
+    stone: {
+      name: 'Skipping Stone', kind: 'attack', icon: '◌',
+      desc: 'Skim a row where you have a ship. It hits every other cell (A, C, E, G, I) and doesn’t stop on a hit. Mines can’t catch it.',
+    },
     // Not in the deck: what Heavy Cargo becomes once it lands in the enemy's hand.
     cargoload: {
       name: 'Heavy Cargo', kind: 'locked', icon: '▣',
@@ -128,7 +145,7 @@
   };
 
   const CARD_ORDER = [
-    'sonar', 'recon', 'double', 'torpedo', 'cluster', 'rapid', 'parallel',
+    'sonar', 'recon', 'double', 'chain', 'flare', 'torpedo', 'stone', 'cluster', 'rapid', 'parallel', 'barrage',
     'repair', 'maintenance', 'move', 'backup', 'decoy', 'shield', 'scrambler', 'minefield',
     'bug', 'seals', 'spy', 'salvage', 'cargo', 'smoke', 'trail', 'carepackage',
   ];
@@ -136,11 +153,14 @@
 
   // Single-use cards: once played they stay in the discard pile for the rest of the game
   // (never reshuffled into the deck, can't be salvaged). Keeps games from dragging on.
-  const SINGLE_USE = ['repair', 'maintenance', 'backup'];
+  const SINGLE_USE = ['repair', 'maintenance', 'backup', 'move'];
   const isSalvageable = (k) => !SINGLE_USE.includes(k);
 
   const DECK = { copies: 2, startHand: 2, handMax: 4 };
-  const DECK_SIZE = CARD_ORDER.length * DECK.copies;
+  // Defensive cards come once each so games don't drag on; everything else has DECK.copies.
+  const ONE_COPY = ['repair', 'maintenance', 'move', 'backup', 'shield', 'decoy', 'smoke', 'scrambler'];
+  const copiesOf = (k) => (ONE_COPY.includes(k) ? 1 : DECK.copies);
+  const DECK_SIZE = CARD_ORDER.reduce((n, k) => n + copiesOf(k), 0);
 
   // What the attacker sees on a cell.
   // BLOCKED = a shield deflected a shot here; SPOTTED = Follow the Trail revealed a ship segment here.
@@ -184,6 +204,28 @@
   function parallelArea(r, c, horizontal) {
     const cells = horizontal ? [[r, c - 1], [r, c], [r, c + 1]] : [[r - 1, c], [r, c], [r + 1, c]];
     return cells.filter(([a, b]) => inBounds(a, b));
+  }
+
+  // Delayed Barrage: the 4 corners of the 3×3 around a (clamped) center.
+  function barrageArea(r, c) {
+    const cr = clampCenter(r), cc = clampCenter(c);
+    return { r: cr, c: cc, cells: [[cr - 1, cc - 1], [cr - 1, cc + 1], [cr + 1, cc - 1], [cr + 1, cc + 1]] };
+  }
+
+  // Skipping Stone: every other cell of a row, starting at the row-number side (columns A, C, E, G, I).
+  function stoneCells(row) {
+    const cells = [];
+    for (let c = 0; c < SIZE; c += 2) cells.push([row, c]);
+    return cells;
+  }
+
+  // Flare Round: the 8 cells around a target.
+  function ringArea(r, c) {
+    const out = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if ((dr || dc) && inBounds(r + dr, c + dc)) out.push([r + dr, c + dc]);
+    }
+    return out;
   }
 
   // A full row ('row') or column ('col').
@@ -477,7 +519,7 @@
       this.turnNumber = 0;
       this.winner = null;
       this.shotsLeft = 0;
-      this.deck = shuffle(CARD_ORDER.flatMap((k) => new Array(DECK.copies).fill(k)), rng);
+      this.deck = shuffle(CARD_ORDER.flatMap((k) => new Array(copiesOf(k)).fill(k)), rng);
       this.discard = [];
       this.hands = [[], []];
       this.scans = [[], []];         // sonar pings player p made on the opponent's board
@@ -487,6 +529,9 @@
       this.smokeNext = [false, false]; // player p's next turn is fought blind (Smoke Screen)
       this.smoked = false;           // current player's results are hidden this turn
       this.trail = [false, false];   // player p has Follow the Trail armed
+      this.barrage = [null, null];   // player p's Delayed Barrage, public: { cells, turn }
+      this.chain = 0;                // Chain Shot: extra shots the current player can still earn
+      this.barrageLanded = false;    // the current player's barrage landed this turn: it was their shot and attack
       this.cargo = [[], []];         // turns left for each Heavy Cargo in player p's hand
       this.utilityPlayed = false;
       this.attackPlayed = false;
@@ -527,6 +572,8 @@
       this.shotsLeft = 1;
       this.utilityPlayed = false;
       this.attackPlayed = false;
+      this.chain = 0;
+      this.barrageLanded = false;
       this.jammed = this.bugNext[this.turn];
       this.bugNext[this.turn] = false;
       // Smoke from the previous turn lifts: show this player what they hit.
@@ -540,12 +587,22 @@
       this.draw(this.turn, events, 'turn');
       if (this.jammed) events.push({ type: 'jammed', player: this.turn });
       if (this.smoked) events.push({ type: 'smoked', player: this.turn });
+      // A Delayed Barrage fired last turn lands now, before this player acts.
+      const bar = this.barrage[this.turn];
+      if (bar) {
+        this.barrage[this.turn] = null;
+        this.barrageLanded = true; // the barrage is this turn's shot (and attack); utility cards still allowed
+        const opp = this.boards[1 - this.turn];
+        const results = bar.cells.filter(([r, c]) => opp.targetable(r, c)).map(([r, c]) => this._strike(this.turn, r, c));
+        events.push({ type: 'barrage-land', player: this.turn, cells: bar.cells, results, smoked: this.smoked });
+        if (results.length) this._resolveStrikes(this.turn, results, events);
+      }
     }
 
     // Only a bugged player ends their turn without firing.
     endTurn(p) {
       if (this.phase !== 'battle' || this.turn !== p) return { ok: false, reason: 'Not your turn' };
-      if (!this.jammed) return { ok: false, reason: 'You still have a shot to fire' };
+      if (!this.jammed && !this.barrageLanded) return { ok: false, reason: 'You still have a shot to fire' };
       const events = [{ type: 'pass', player: p }];
       this._endTurn(events);
       return { ok: true, events };
@@ -579,6 +636,7 @@
       if (card.kind === 'utility' && this.attackPlayed) return 'Utility cards must come before your attack card';
       if (card.kind === 'attack' && this.attackPlayed) return 'One attack card per turn';
       if (card.kind === 'attack' && this.jammed) return 'Software Bug: no attacks this turn';
+      if (card.kind === 'attack' && this.barrageLanded) return 'Your Delayed Barrage was this turn’s attack';
       const own = this.boards[p];
       switch (key) {
         case 'minefield': return own.randomSpot(MINEFIELD_SIZE) ? null : 'No open water left';
@@ -587,6 +645,16 @@
         case 'spy': return this.hands[1 - p].some((k) => k !== 'cargoload') ? null : 'The enemy has no cards to take';
         case 'cargo': return this.hands[1 - p].length < DECK.handMax ? null : 'The enemy’s hand is already full';
         case 'trail': return this.trail[p] ? 'Follow the Trail is already armed' : null;
+        case 'stone': {
+          const opp = this.boards[1 - p];
+          return this.torpedoRows(p).some((r) => stoneCells(r).some(([a, b]) => opp.targetable(a, b)))
+            ? null : 'No open water on your ships’ rows';
+        }
+        case 'torpedo': {
+          const opp = this.boards[1 - p];
+          return this.torpedoRows(p).some((r) => lineCells('row', r).some(([a, b]) => opp.targetable(a, b)))
+            ? null : 'No open water on your ships’ rows';
+        }
         case 'salvage': return this.discard.some(isSalvageable) ? null : 'Nothing in the discard pile can be salvaged';
         case 'repair': return own.repairableCells().length ? null : 'Nothing to repair';
         case 'maintenance': return own.ships.some((_, i) => own.canMaintain(i)) ? null : 'No damaged ships';
@@ -598,6 +666,14 @@
     }
 
     canPlay(p, key) { return this.cardBlocker(p, key) === null; }
+
+    // Rows player p may fire a torpedo along: rows holding one of their real ships still afloat.
+    torpedoRows(p) {
+      const own = this.boards[p];
+      const rows = new Set();
+      own.afloat().forEach((i) => own.ships[i].cells.forEach(([r]) => rows.add(r)));
+      return [...rows].sort((a, b) => a - b);
+    }
 
     /* ---- actions ------------------------------------------------------ */
 
@@ -648,10 +724,15 @@
     fire(p, r, c) {
       if (this.phase !== 'battle' || this.turn !== p || this.shotsLeft < 1) return { ok: false, reason: 'Cannot fire now' };
       if (this.jammed) return { ok: false, reason: 'Software Bug: your guns are offline this turn' };
+      if (this.barrageLanded) return { ok: false, reason: 'Your Delayed Barrage was this turn’s shot' };
       const res = this._strike(p, r, c);
       if (res.result === 'invalid') return { ok: false, reason: 'Already targeted' };
+      // Chain Shot: a hit (decoys included; you can't tell) earns another shot.
+      const chained = this.chain > 0 && ['hit', 'sunk', 'decoy'].includes(res.result);
+      if (chained) { this.chain--; this.shotsLeft++; }
+      else this.chain = 0;
       this.shotsLeft--;
-      const events = [{ type: 'shot', player: p, results: [res], smoked: this.smoked }];
+      const events = [{ type: 'shot', player: p, results: [res], smoked: this.smoked, chained }];
       this._resolveStrikes(p, [res], events);
       return { ok: true, events };
     }
@@ -733,7 +814,7 @@
           return { ok: true, events };
         }
         case 'double': {
-          this.shotsLeft++;
+          this.shotsLeft = 2;
           break;
         }
         case 'cargo': {
@@ -797,10 +878,12 @@
           break;
         }
         case 'torpedo': {
-          const at = inBounds(target.r, target.c) && own.segment(target.r, target.c);
-          if (!at || own.ships[at.ship].decoy || own.isSunk(at.ship)) return fail('Launch from a ship that is still afloat');
-          const path = torpedoPath(target.r, target.c, target.dir);
-          if (!path.some(([a, b]) => opp.targetable(a, b))) return fail('Nothing left to hit in that direction');
+          // Fired along a row of enemy waters, entering from the row-number side (left).
+          // Only rows where you have a real ship afloat can be chosen, which hints at your position.
+          const row = target.row;
+          if (!this.torpedoRows(p).includes(row)) return fail('You can only fire along a row where you have a ship');
+          const path = lineCells('row', row);
+          if (!path.some(([a, b]) => opp.targetable(a, b))) return fail('Nothing left to hit on that row');
           strikes = [];
           for (const [a, b] of path) {
             const field = opp.mineAt(a, b);
@@ -814,7 +897,42 @@
             strikes.push(res);
             if (res.result !== 'miss') break;
           }
-          Object.assign(ev, { r: target.r, c: target.c, dir: target.dir, shipName: own.ships[at.ship].name });
+          ev.row = row;
+          break;
+        }
+        case 'chain': {
+          this.chain = 2; // up to 2 extra shots on top of this one
+          break;
+        }
+        case 'flare': {
+          if (!inBounds(target.r, target.c) || !opp.targetable(target.r, target.c)) return fail('Pick an open cell in enemy waters');
+          strikes = [this._strike(p, target.r, target.c)];
+          // Light up the 8 cells around it: ship cells become 'spotted', water becomes a miss marker.
+          const revealed = [];
+          ringArea(target.r, target.c).forEach(([a, b]) => {
+            const k = idx(a, b);
+            if (opp.shots[k] !== SHOT.NONE || opp.fog.has(k)) return;
+            const ship = opp.grid[k] !== -1;
+            opp.shots[k] = ship ? SHOT.SPOTTED : SHOT.MISS;
+            revealed.push({ r: a, c: b, ship });
+          });
+          Object.assign(ev, { r: target.r, c: target.c, revealed });
+          break;
+        }
+        case 'barrage': {
+          if (!inBounds(target.r, target.c)) return fail('Pick a cell in enemy waters');
+          const area = barrageArea(target.r, target.c);
+          this.barrage[p] = { cells: area.cells, turn: this.turnNumber };
+          Object.assign(ev, { r: area.r, c: area.c, cells: area.cells });
+          break;
+        }
+        case 'stone': {
+          const row = target.row;
+          if (!this.torpedoRows(p).includes(row)) return fail('You can only skim a row where you have a ship');
+          const cells = stoneCells(row).filter(([a, b]) => opp.targetable(a, b));
+          if (!cells.length) return fail('Nothing left to hit on that row');
+          strikes = cells.map(([a, b]) => this._strike(p, a, b)); // keeps going after hits; skims over mines
+          ev.row = row;
           break;
         }
         case 'cluster': {
@@ -855,8 +973,13 @@
       if (strikes) { ev.results = strikes; ev.smoked = this.smoked; }
       events.push(ev);
 
-      // Attack cards don't use up the regular shot: it still follows and ends the turn.
-      if (strikes) this._resolveStrikes(p, strikes, events);
+      // An attack card replaces the regular shot, so it ends the turn.
+      // Double Salvo and Chain Shot hand you shots to fire instead; Delayed Barrage
+      // lands next turn, so you still take your regular shot now.
+      if (strikes) {
+        this.shotsLeft = 0;
+        this._resolveStrikes(p, strikes, events);
+      }
       return { ok: true, events };
     }
 
@@ -866,9 +989,9 @@
   }
 
   const api = {
-    SIZE, FLEET, BACKUP_SHIP, DECOY_SHIP, MINEFIELD_SIZE, CARGO_TURNS, SINGLE_USE, CARDS, CARD_ORDER, DECK, DECK_SIZE, SHOT, DIRS,
+    SIZE, FLEET, BACKUP_SHIP, DECOY_SHIP, MINEFIELD_SIZE, CARGO_TURNS, SINGLE_USE, ONE_COPY, copiesOf, CARDS, CARD_ORDER, DECK, DECK_SIZE, SHOT, DIRS,
     Board, Game,
-    sonarArea, clusterArea, parallelArea, torpedoPath, lineCells, directionTo, shipCells, idx, inBounds,
+    sonarArea, clusterArea, parallelArea, barrageArea, stoneCells, ringArea, torpedoPath, lineCells, directionTo, shipCells, idx, inBounds,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

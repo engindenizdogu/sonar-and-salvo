@@ -7,10 +7,10 @@
   'use strict';
 
   const S = (typeof module !== 'undefined' && module.exports) ? require('./engine.js') : root.SonarSalvo;
-  const { SIZE, SHOT, DIRS, MINEFIELD_SIZE, idx, inBounds, sonarArea, clusterArea, parallelArea, torpedoPath, lineCells, shipCells } = S;
+  const { SIZE, SHOT, MINEFIELD_SIZE, idx, inBounds, sonarArea, clusterArea, parallelArea, lineCells, shipCells, barrageArea, stoneCells, ringArea } = S;
 
   // Most useful cards first: what to steal back with Salvage, or strip from the enemy with Spy Satellite.
-  const CARD_VALUE = ['maintenance', 'rapid', 'cluster', 'move', 'bug', 'torpedo', 'shield', 'parallel', 'smoke',
+  const CARD_VALUE = ['maintenance', 'rapid', 'cluster', 'chain', 'barrage', 'move', 'flare', 'stone', 'bug', 'torpedo', 'shield', 'parallel', 'smoke',
     'spy', 'double', 'repair', 'cargo', 'decoy', 'backup', 'trail', 'seals', 'recon', 'minefield', 'sonar', 'scrambler',
     'salvage', 'carepackage'];
   const valueOf = (k) => (CARD_VALUE.includes(k) ? CARD_VALUE.length - CARD_VALUE.indexOf(k) : -1);
@@ -213,23 +213,58 @@
       return this._argmax(cands);
     }
 
-    _bestTorpedo(score) {
-      const own = this.own, b = this.target;
+    _bestFlare(score) {
+      const b = this.target;
       const cands = [];
-      for (const i of own.afloat()) {
-        for (const [r, c] of own.ships[i].cells) {
-          for (const dir of Object.keys(DIRS)) {
-            // Expected value: earlier cells matter more because the torpedo stops on contact.
-            let v = 0, decay = 1, any = false;
-            for (const [a, bb] of torpedoPath(r, c, dir)) {
-              if (!b.targetable(a, bb)) continue;
-              any = true;
-              v += score[idx(a, bb)] * decay;
-              decay *= 0.8;
-            }
-            if (any) cands.push({ r, c, dir, value: v });
-          }
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+        if (!b.targetable(r, c)) continue;
+        // value = the shot itself + what the lit-up ring could tell us
+        let v = score[idx(r, c)];
+        ringArea(r, c).forEach(([a, bb]) => { if (b.shots[idx(a, bb)] === SHOT.NONE) v += score[idx(a, bb)] * 0.5; });
+        cands.push({ r, c, value: v });
+      }
+      return this._argmax(cands);
+    }
+
+    _bestBarrage(score) {
+      const cands = [];
+      for (let r = 1; r < SIZE - 1; r++) for (let c = 1; c < SIZE - 1; c++) {
+        const v = this._sum(barrageArea(r, c).cells, score);
+        if (v > 0) cands.push({ r, c, value: v });
+      }
+      return this._argmax(cands);
+    }
+
+    _bestStone(score) {
+      const cands = [];
+      for (const row of this.game.torpedoRows(this.p)) {
+        const v = this._sum(stoneCells(row), score);
+        if (v > 0) cands.push({ row, value: v });
+      }
+      return this._argmax(cands);
+    }
+
+    // Our real ship (afloat) sitting under the enemy's announced Delayed Barrage, if any.
+    _underBarrage() {
+      const bar = this.game.barrage[1 - this.p];
+      if (!bar) return undefined;
+      const own = this.own;
+      return own.afloat().find((i) => own.ships[i].cells.some(([r, c]) => bar.cells.some(([a, b]) => a === r && b === c)));
+    }
+
+    _bestTorpedo(score) {
+      const b = this.target;
+      const cands = [];
+      for (const row of this.game.torpedoRows(this.p)) {
+        // Expected value: earlier cells matter more because the torpedo stops on contact.
+        let v = 0, decay = 1, any = false;
+        for (const [a, bb] of lineCells('row', row)) {
+          if (!b.targetable(a, bb)) continue;
+          any = true;
+          v += score[idx(a, bb)] * decay;
+          decay *= 0.8;
         }
+        if (any) cands.push({ row, value: v });
       }
       return this._argmax(cands);
     }
@@ -295,7 +330,20 @@
           if (best && valueOf(best) >= valueOf('torpedo') && chance(0.7)) return card('salvage', { card: best });
         }
 
-        // Defense first.
+        // Defense first: get out from under an announced Delayed Barrage.
+        const target = this._underBarrage();
+        if (target !== undefined) {
+          const bar = g.barrage[1 - p];
+          if (playable('move')) {
+            for (let tries = 0; tries < 20; tries++) {
+              const spot = own.randomSpot(own.ships[target].size, target, this.rng);
+              if (!spot) break;
+              const cells = shipCells(own.ships[target].size, spot.r, spot.c, spot.horizontal);
+              if (!cells.some(([r, c]) => bar.cells.some(([a, b]) => a === r && b === c))) return card('move', { ship: target, ...spot });
+            }
+          }
+          if (playable('shield')) return card('shield', { ship: target });
+        }
         const crit = this._critical();
         if (crit !== undefined) {
           if (playable('maintenance')) return card('maintenance', { ship: crit });
@@ -335,7 +383,10 @@
         }
 
         // Offense.
+        // Delayed Barrage doesn't cost the shot, so it's almost always worth laying.
+        if (playable('barrage') && chance(0.8)) { const t = this._bestBarrage(score); if (t) return card('barrage', t); }
         if (this.hasOpenMarks()) {
+          if (playable('chain')) return card('chain');
           if (playable('parallel')) { const t = this._bestLine3(score); if (t) return card('parallel', t); }
           if (playable('rapid')) return card('rapid', { cells: this._bestRapid4(score) });
           if (playable('double')) return card('double');
@@ -345,14 +396,17 @@
           if (playable('cluster') && chance(0.7)) { const t = this._bestCluster(score); if (t) return card('cluster', t); }
           if (playable('rapid') && chance(0.7)) return card('rapid', { cells: this._bestRapid4(score) });
           if (playable('torpedo') && chance(0.5)) { const t = this._bestTorpedo(score); if (t) return card('torpedo', t); }
+          if (playable('stone') && chance(0.6)) { const t = this._bestStone(score); if (t) return card('stone', t); }
+          if (playable('flare') && chance(0.6)) { const t = this._bestFlare(score); if (t) return card('flare', t); }
           if (playable('sonar') && chance(0.6)) { const t = this._bestSonar(score); if (t) return card('sonar', t); }
           if (playable('recon') && chance(0.5)) { const t = this._bestRecon(score); if (t) return card('recon', t); }
           if (playable('double') && chance(0.4)) return card('double');
           if (playable('parallel') && chance(0.4)) { const t = this._bestLine3(score); if (t) return card('parallel', t); }
+          if (playable('chain') && chance(0.3)) return card('chain');
         }
       }
 
-      if (g.jammed) return { kind: 'end' }; // Software Bug: no shot this turn
+      if (g.jammed || g.barrageLanded) return { kind: 'end' }; // Software Bug, or our barrage was this turn's shot
       const t = this.bestCell(score);
       return { kind: 'fire', r: t.r, c: t.c };
     }

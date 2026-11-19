@@ -20,7 +20,7 @@ function checkInvariants(g) {
   S.SINGLE_USE.forEach((k) => {
     const played = g.__playedSingle ? g.__playedSingle[k] || 0 : 0;
     const inDeck = g.deck.filter((d) => d === k).length;
-    if (inDeck > S.DECK.copies - played) problems.push(`single-use ${k} came back into the deck`);
+    if (inDeck > S.copiesOf(k) - played) problems.push(`single-use ${k} came back into the deck`);
   });
   if (g.deck.includes('cargoload') || g.discard.includes('cargoload')) problems.push('locked cargo leaked into deck/discard');
   g.hands.forEach((h, p) => {

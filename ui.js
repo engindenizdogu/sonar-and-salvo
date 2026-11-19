@@ -27,7 +27,7 @@
   const lineName = (line, index) => (line === 'row' ? `row ${index + 1}` : `column ${COLS[index]}`);
   const isHit = (r) => r.result === 'hit' || r.result === 'sunk' || r.result === 'decoy';
   const KIND_NAME = { attack: 'Attack', utility: 'Utility', free: 'Free', locked: 'Locked' };
-  const KIND_RULE = { attack: 'Then take your shot', utility: 'Play before attacks', free: 'Doesn’t count toward limits', locked: 'Can’t be played' };
+  const KIND_RULE = { attack: 'Replaces your shot', utility: 'Play before attacks', free: 'Doesn’t count toward limits', locked: 'Can’t be played' };
 
   // A playing-card face. The outer <button> is a fixed-size slot; the face inside can lift and zoom on hover.
   function cardFace(key, corner, rule) {
@@ -36,7 +36,7 @@
         <span class="card-band"><span class="card-kind">${KIND_NAME[c.kind]}</span><span class="card-key">${corner}</span></span>
         <span class="card-art" aria-hidden="true"><span class="card-icon">${c.icon}</span></span>
         <span class="card-name">${c.name}</span>
-        <span class="card-tag">${rule || KIND_RULE[c.kind]}</span>
+        <span class="card-tag">${rule || c.rule || KIND_RULE[c.kind]}</span>
         <span class="card-desc">${c.desc}</span>
       </span>`;
   }
@@ -45,7 +45,7 @@
   let game, ai;
   let selectedShip = 0;      // setup: ship being placed
   let horizontal = true;     // setup: orientation
-  let pending = null;        // card awaiting targets: { key, handIndex, step, ship, horizontal, origin, picks }
+  let pending = null;        // card awaiting targets: { key, handIndex, step, ship, horizontal, picks }
   let busy = false;          // computer is acting
   let hoverPlayer = null;    // [r, c]
   let hoverEnemy = null;     // [r, c]
@@ -78,6 +78,8 @@
       const l = document.createElement('div');
       l.className = 'label';
       l.textContent = r + 1;
+      l.dataset.row = r;
+      l.classList.add('row-label');
       place(l, r + 2, 1);
       boardEl.appendChild(l);
       store[r] = [];
@@ -172,11 +174,29 @@
         return mine ? `Care Package: sent ${CARDS[ev.returned].name} back to the deck.` : 'Enemy opened a Care Package and swapped a card.';
       case 'double':
         return mine ? 'Double Salvo loaded: two shots this turn.' : 'Enemy loads a Double Salvo.';
+      case 'chain':
+        return mine ? 'Chain Shot loaded: every hit earns another shot, up to 3.' : 'Enemy loads a Chain Shot.';
+      case 'flare': {
+        const ships = (ev.revealed || []).filter((x) => x.ship).length;
+        const lit = (ev.revealed || []).length;
+        if (!mine) return `Enemy Flare Round on ${coord(ev.r, ev.c)}: ${res[0] && res[0].result !== 'miss' ? 'a hit, and ' : ''}${plural(ships, 'of your ship segments')} lit up.`;
+        if (ev.smoked) return `Flare Round on ${coord(ev.r, ev.c)}: the shot is lost in the smoke, but the flare lights ${plural(lit, 'cell')}.`;
+        return `Flare Round on ${coord(ev.r, ev.c)}: ${res[0].result === 'miss' ? 'splash.' : 'hit!'} The flare lights ${plural(lit, 'cell')}: ${plural(ships, 'ship segment')} spotted.`;
+      }
+      case 'barrage': {
+        const cellsText = ev.cells.map(([r, c]) => coord(r, c)).join(', ');
+        return mine
+          ? `Delayed Barrage locked on ${cellsText}. It lands at the start of your next turn.`
+          : `Enemy Delayed Barrage locked on ${cellsText}. It lands after your turn: move or shield ships there!`;
+      }
+      case 'stone':
+        return `${mine ? 'Skipping Stone' : `Enemy Skipping Stone (they have a ship in that row)`} along row ${ev.row + 1}: ${strikeSummary(res)}.`;
       case 'torpedo': {
         const contact = res.find((r) => r.result !== 'miss');
         const water = plural(res.filter((r) => r.result === 'miss').length, 'cell');
-        const from = mine ? `from your ${ev.shipName} at ${coord(ev.r, ev.c)}` : `from ${coord(ev.r, ev.c)}`;
-        let text = `${mine ? 'Torpedo' : 'Enemy torpedo'} launched ${from}, heading ${ev.dir}`;
+        let text = mine
+          ? `Torpedo fired along row ${ev.row + 1}`
+          : `Enemy torpedo fired along row ${ev.row + 1}. They have a ship in that row`;
         if (!contact) return `${text}: no contact, ${water} of open water charted.`;
         text += `: ${water} of open water, then `;
         if (contact.result === 'blocked') return `${text}it is deflected by a shield at ${coord(contact.r, contact.c)}.`;
@@ -221,9 +241,11 @@
     const sunkLines = [];
 
     for (const ev of events) {
+      const by = ev.type === 'barrage-land' ? ev.player : actor; // who fired these results
+      const byWho = by === 0 ? 'you' : 'enemy';
       (ev.results || []).forEach((r) => {
-        if (r.result === 'sunk') sunkLines.push([actor === 0 ? `You sank the enemy ${r.shipName}!` : `The enemy sank your ${r.shipName}.`, who]);
-        if (r.result === 'decoy') sunkLines.push([actor === 0 ? 'That “ship” was a Decoy! Nothing real was there.' : `The enemy destroyed your ${r.shipName}.`, who]);
+        if (r.result === 'sunk') sunkLines.push([by === 0 ? `You sank the enemy ${r.shipName}!` : `The enemy sank your ${r.shipName}.`, byWho]);
+        if (r.result === 'decoy') sunkLines.push([by === 0 ? 'That “ship” was a Decoy! Nothing real was there.' : `The enemy destroyed your ${r.shipName}.`, byWho]);
       });
 
       switch (ev.type) {
@@ -234,7 +256,7 @@
           if (actor === 0 && ev.smoked && r.result !== 'sunk') addLog(`${verb} ${at}: lost in the smoke.`, who);
           else if (r.result === 'miss') addLog(`${verb} ${at}: splash.`, who);
           else if (r.result === 'blocked') addLog(actor === 0 ? `${verb} ${at}: deflected by a Rocket Shield. There's a ship there!` : `${verb} ${at}: your ${r.shipName}'s shield holds.`, who);
-          else addLog(actor === 0 ? `${verb} ${at}: hit!` : `${verb} ${at}: your ${r.shipName} is hit!`, who);
+          else addLog(actor === 0 ? `${verb} ${at}: hit!${ev.chained ? ' Chain Shot: fire again.' : ''}` : `${verb} ${at}: your ${r.shipName} is hit!${ev.chained ? ' The chain continues.' : ''}`, who);
           break;
         }
         case 'card':
@@ -260,6 +282,17 @@
             ? 'Software Bug! Your guns are offline this turn. You can still play one utility card, then end your turn.'
             : 'The enemy’s guns are jammed by your Software Bug.', ev.player === 0 ? 'you' : 'enemy', true);
           break;
+        case 'barrage-land': {
+          const mine = ev.player === 0;
+          const res = ev.results;
+          let text = mine ? 'Your Delayed Barrage lands' : 'The enemy’s Delayed Barrage lands on your waters';
+          if (!res.length) text += ': all 4 cells were already charted.';
+          else if (mine && ev.smoked) text += ' in the smoke: results hidden until your next turn.';
+          else text += `: ${strikeSummary(res)}.`;
+          if (mine) text += ' That was this turn’s shot.';
+          addLog(text, mine ? 'you' : 'enemy', true);
+          break;
+        }
         case 'smoked':
           addLog(ev.player === 0
             ? 'Smoke Screen! You fire blind this turn: results show at the start of your next turn.'
@@ -306,13 +339,14 @@
   }
 
   function playEffects(events, actor) {
-    const target = actor === 0 ? cells.enemy : cells.player;
     const own = actor === 0 ? cells.player : cells.enemy;
     const kinds = { miss: 'miss', blocked: 'shield', hit: 'hit', sunk: 'hit', decoy: 'hit', mine: 'mine' };
     for (const ev of events) {
-      const blind = actor === 0 && ev.smoked;
+      const by = ev.type === 'barrage-land' ? ev.player : actor;
+      const board = by === 0 ? cells.enemy : cells.player;
+      const blind = by === 0 && ev.smoked;
       (ev.results || []).forEach((r, i) => {
-        setTimeout(() => flash(target, r.r, r.c, blind && r.result !== 'sunk' ? 'smoke' : kinds[r.result]), i * 70);
+        setTimeout(() => flash(board, r.r, r.c, blind && r.result !== 'sunk' ? 'smoke' : kinds[r.result]), i * 70);
       });
       // Only show your own repairs; the enemy's would give their position away.
       if (actor === 0 && ev.card === 'repair') flash(own, ev.r, ev.c, 'repair');
@@ -350,6 +384,8 @@
     setTimeout(step, AI_DELAY);
   }
 
+  // No regular shot this turn: Software Bug, or your Delayed Barrage landed and was this turn's shot
+  const noShotThisTurn = () => game.jammed || game.barrageLanded;
   const humanCanAct = () => game.phase === 'battle' && game.turn === 0 && !busy;
 
   function setHint(text, alert = false) {
@@ -371,9 +407,10 @@
       cluster: () => 'Pick the center of the plus-shaped strike in enemy waters.',
       parallel: () => 'Pick the middle of the 3-cell line in enemy waters. Press R to rotate.',
       rapid: () => `Pick ${rapidNeed()} cells in enemy waters (${pending.picks.length}/${rapidNeed()} chosen). Click a pick again to undo it.`,
-      torpedo: () => (step === 'origin'
-        ? 'Pick the segment of one of your ships to launch from, on your board.'
-        : `Launching from ${coord(...pending.origin)}. Click a highlighted cell in enemy waters to choose a direction.`),
+      flare: () => 'Pick a cell in enemy waters to fire at. The 8 cells around it light up.',
+      barrage: () => 'Pick the center of a 3×3 area in enemy waters. Its 4 corners are hit at the start of your next turn, and the enemy can see them.',
+      stone: () => 'Pick a row number on the enemy grid. Only rows where you have a ship. It hits columns A, C, E, G and I.',
+      torpedo: () => 'Pick a row number on the enemy grid. You can only fire along rows where you have a ship, so the enemy learns that row.',
       repair: () => 'Pick a damaged (pulsing) segment on your board.',
       maintenance: () => 'Pick a damaged ship on your board.',
       shield: () => 'Pick the ship to shield on your board.',
@@ -404,11 +441,12 @@
 
   const FIRST_STEP = {
     sonar: 'enemy', cluster: 'enemy', parallel: 'enemy', rapid: 'enemy',
-    torpedo: 'origin', repair: 'own-cell', maintenance: 'own-ship', shield: 'own-ship',
+    torpedo: 'enemy', stone: 'enemy', flare: 'enemy', barrage: 'enemy', repair: 'own-cell', maintenance: 'own-ship', shield: 'own-ship',
     scrambler: 'own-ship', move: 'own-ship', backup: 'place', carepackage: 'hand',
     minefield: 'place', decoy: 'place', recon: 'enemy', salvage: 'modal', spy: 'modal',
   };
-  const INSTANT = ['double', 'seals', 'bug', 'cargo', 'smoke', 'trail']; // no target needed
+  const ROW_AIMED = ['torpedo', 'stone']; // aimed by clicking a row number
+  const INSTANT = ['double', 'chain', 'seals', 'bug', 'cargo', 'smoke', 'trail']; // no target needed
 
   function selectCard(i) {
     if (!humanCanAct()) return;
@@ -502,13 +540,6 @@
           play({ ship: s });
         }
         break;
-      case 'origin':
-        if (s === -1 || board.isSunk(s)) { setHint('Launch from a ship that is still afloat.', true); render(); return; }
-        pending.origin = [r, c];
-        pending.step = 'aim';
-        hint = null;
-        render();
-        break;
       case 'place':
         if (pending.key === 'move') play({ ship: pending.ship, r, c, horizontal: pending.horizontal });
         else play({ r, c, horizontal: pending.horizontal });
@@ -528,6 +559,12 @@
   el.playerBoard.addEventListener('mouseleave', () => { hoverPlayer = null; renderBoards(); });
 
   el.enemyBoard.addEventListener('click', (e) => {
+    // Torpedo: click a row number (or any cell in that row)
+    const rowLabel = e.target.closest('.row-label');
+    if (rowLabel && humanCanAct() && pending && ROW_AIMED.includes(pending.key)) {
+      play({ row: Number(rowLabel.dataset.row) });
+      return;
+    }
     const pos = cellFromEvent(e);
     if (!pos || !humanCanAct()) return;
     const [r, c] = pos;
@@ -535,6 +572,7 @@
 
     if (!pending) {
       if (game.jammed) { setHint('Software Bug: you can’t fire this turn. End your turn when ready.', true); render(); return; }
+      if (game.barrageLanded) { setHint('Your Delayed Barrage was this turn’s shot. End your turn when ready.', true); render(); return; }
       if (eb.targetable(r, c)) apply(game.fire(0, r, c), 0);
       return;
     }
@@ -547,20 +585,19 @@
         else render();
       } else if (pending.key === 'parallel') {
         play({ r, c, horizontal: pending.horizontal });
+      } else if (ROW_AIMED.includes(pending.key)) {
+        play({ row: r });
       } else if (pending.key === 'recon') {
         play(pending.horizontal ? { line: 'row', index: r } : { line: 'col', index: c });
       } else {
         play({ r, c });
       }
-    } else if (pending.step === 'aim') {
-      const dir = S.directionTo(pending.origin[0], pending.origin[1], r, c);
-      if (!dir) { setHint('Click a cell in the same row or column as the launch point.', true); render(); return; }
-      play({ r: pending.origin[0], c: pending.origin[1], dir });
     }
   });
 
   el.enemyBoard.addEventListener('mouseover', (e) => {
-    const pos = cellFromEvent(e);
+    const rowLabel = e.target.closest('.row-label');
+    const pos = rowLabel ? [Number(rowLabel.dataset.row), 0] : cellFromEvent(e);
     if (pos && (!hoverEnemy || pos[0] !== hoverEnemy[0] || pos[1] !== hoverEnemy[1])) {
       hoverEnemy = pos;
       renderBoards();
@@ -569,6 +606,29 @@
   el.enemyBoard.addEventListener('mouseleave', () => { hoverEnemy = null; renderBoards(); });
 
   el.rotateBtn.addEventListener('click', () => { horizontal = !horizontal; render(); });
+
+  // Mouse wheel rotates whatever is being placed or aimed on that board. Only then is page
+  // scrolling blocked. One rotation per gesture, so trackpad bursts don't spin it repeatedly.
+  let lastWheelRotate = 0;
+  function wheelRotate(e, board) {
+    let canRotate = false;
+    if (board === 'player') {
+      canRotate = (game.phase === 'setup' && selectedShip !== null)
+        || (humanCanAct() && !!pending && pending.step === 'place');
+    } else {
+      canRotate = humanCanAct() && !!pending && (pending.key === 'parallel' || pending.key === 'recon');
+    }
+    if (!canRotate || Math.abs(e.deltaY) + Math.abs(e.deltaX) < 1) return;
+    e.preventDefault();
+    const now = performance.now();
+    const quiet = now - lastWheelRotate > 280;
+    lastWheelRotate = now;
+    if (!quiet) return;
+    if (game.phase === 'setup') { horizontal = !horizontal; render(); }
+    else rotatePending();
+  }
+  el.playerBoard.addEventListener('wheel', (e) => wheelRotate(e, 'player'), { passive: false });
+  el.enemyBoard.addEventListener('wheel', (e) => wheelRotate(e, 'enemy'), { passive: false });
   el.randomBtn.addEventListener('click', () => {
     game.boards[0].randomize();
     selectedShip = null;
@@ -583,6 +643,15 @@
   el.cardRotateBtn.addEventListener('click', rotatePending);
   el.cardCancelBtn.addEventListener('click', cancelPending);
   el.endTurnBtn.addEventListener('click', () => { if (humanCanAct()) { pending = null; apply(game.endTurn(0), 0); } });
+
+  // A hovered card zooms upward from its bottom edge. If the hand sits partly below the fold,
+  // lift the card far enough that the whole enlarged card (and its full text) is on screen.
+  el.hand.addEventListener('mouseover', (e) => {
+    const card = e.target.closest('.card');
+    if (!card) return;
+    const overflow = card.getBoundingClientRect().bottom - (window.innerHeight - 14);
+    card.style.setProperty('--lift', `${Math.max(16, Math.ceil(overflow) + 16)}px`);
+  });
 
   el.hand.addEventListener('click', (e) => {
     const btn = e.target.closest('.card');
@@ -669,9 +738,6 @@
           addShip(i);
         });
         break;
-      case 'origin':
-        b.afloat().forEach(addShip);
-        break;
       default:
         return null;
     }
@@ -680,27 +746,27 @@
 
   function enemyPreview() {
     if (!pending || !humanCanAct()) {
-      if (hoverEnemy && humanCanAct() && !game.jammed && game.boards[1].targetable(...hoverEnemy)) return { aim: [hoverEnemy], ok: true };
+      if (hoverEnemy && humanCanAct() && !noShotThisTurn() && game.boards[1].targetable(...hoverEnemy)) return { aim: [hoverEnemy], ok: true };
       return null;
     }
     const eb = game.boards[1];
     const open = ([a, b]) => eb.targetable(a, b);
-    if (pending.step === 'aim') {
-      const [or, oc] = pending.origin;
-      const lanes = Object.keys(S.DIRS).flatMap((d) => S.torpedoPath(or, oc, d));
-      let aim = [];
-      if (hoverEnemy) {
-        const dir = S.directionTo(or, oc, hoverEnemy[0], hoverEnemy[1]);
-        if (dir) aim = S.torpedoPath(or, oc, dir);
-      }
-      return { lanes, aim, ok: aim.some(open), origin: pending.origin };
-    }
     if (pending.step !== 'enemy') return null;
     const picks = pending.key === 'rapid' ? pending.picks : [];
     if (!hoverEnemy) return { aim: [], picks, ok: true };
     const [r, c] = hoverEnemy;
     let aim;
     if (pending.key === 'sonar') return { aim: S.sonarArea(r, c).cells, picks, ok: true };
+    if (pending.key === 'stone') {
+      const lane = S.stoneCells(r);
+      return { aim: lane, picks, ok: game.torpedoRows(0).includes(r) && lane.some(open) };
+    }
+    if (pending.key === 'flare') return { aim: [[r, c], ...S.ringArea(r, c)], picks, ok: open([r, c]) };
+    if (pending.key === 'barrage') return { aim: S.barrageArea(r, c).cells, picks, ok: true };
+    if (pending.key === 'torpedo') {
+      const lane = S.lineCells('row', r);
+      return { aim: lane, picks, ok: game.torpedoRows(0).includes(r) && lane.some(open) };
+    }
     if (pending.key === 'recon') return { aim: pending.horizontal ? S.lineCells('row', r) : S.lineCells('col', c), picks, ok: true };
     if (pending.key === 'cluster') aim = S.clusterArea(r, c);
     else if (pending.key === 'parallel') aim = S.parallelArea(r, c, pending.horizontal);
@@ -746,7 +812,6 @@
         cls.push('eligible');
         if (pending.step === 'own-cell') cls.push('repairable'); // Field Repair: pulse the damaged segment
       }
-      if (pending && pending.step === 'aim' && pending.origin[0] === r && pending.origin[1] === c) cls.push('origin');
       cells.player[r][c].className = cls.join(' ');
     }
 
@@ -754,9 +819,8 @@
     const eb = game.boards[1];
     const prev = enemyPreview();
     const aimSet = prev && prev.aim ? toSet(prev.aim) : null;
-    const laneSet = prev && prev.lanes ? toSet(prev.lanes) : null;
     const pickSet = prev && prev.picks ? toSet(prev.picks) : null;
-    const canFire = humanCanAct() && (pending ? (pending.step === 'enemy' || pending.step === 'aim') : !game.jammed);
+    const canFire = humanCanAct() && (pending ? pending.step === 'enemy' : !noShotThisTurn());
     const detonatedFoe = toSet(eb.detonated);
     for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
       const cls = ['cell'];
@@ -777,12 +841,28 @@
       }
       if (canFire && eb.targetable(r, c)) cls.push('open');
       const k = key(r, c);
-      if (laneSet && laneSet.has(k)) cls.push('lane');
       if (aimSet && aimSet.has(k)) cls.push('aim', prev.ok ? 'ok' : 'bad');
       if (pickSet && pickSet.has(k)) cls.push('picked');
-      if (prev && prev.origin && prev.origin[0] === r && prev.origin[1] === c) cls.push('origin');
       cells.enemy[r][c].className = cls.join(' ');
     }
+
+    // Torpedo: row numbers you can fire along light up; the others dim
+    const torpedoAiming = humanCanAct() && pending && ROW_AIMED.includes(pending.key);
+    const allowedRows = torpedoAiming ? new Set(game.torpedoRows(0)) : null;
+    el.enemyBoard.querySelectorAll('.row-label').forEach((l) => {
+      const row = Number(l.dataset.row);
+      l.classList.toggle('row-pick', !!torpedoAiming && allowedRows.has(row));
+      l.classList.toggle('row-off', !!torpedoAiming && !allowedRows.has(row));
+      l.classList.toggle('row-hot', !!torpedoAiming && allowedRows.has(row) && !!hoverEnemy && hoverEnemy[0] === row);
+    });
+
+    // Delayed Barrage: your pending targets on enemy waters, the enemy's on yours
+    const markIncoming = (store, bar, cls) => {
+      if (!bar) return;
+      bar.cells.forEach(([r, c]) => store[r][c].classList.add('incoming', cls));
+    };
+    markIncoming(cells.enemy, game.barrage[0], 'by-you');
+    markIncoming(cells.player, game.barrage[1], 'by-enemy');
 
     renderPings(el.enemyBoard, game.scans[0], 0, '');
     renderPings(el.playerBoard, game.scans[1], 1, 'enemy');
@@ -916,16 +996,20 @@
       else if (game.jammed) text = game.utilityPlayed
         ? 'Software Bug: your guns are offline. End your turn when ready.'
         : 'Software Bug: your guns are offline. You can still play one utility card, then end your turn.';
-      else if (game.attackPlayed) text = `Attack done. Now take your regular shot${game.shotsLeft > 1 ? 's' : ''} to end the turn.`;
-      else if (game.utilityPlayed) text = 'Utility played. You can still play one attack card, then take your regular shot.';
-      else text = 'Your turn: one utility card, then one attack card, then your regular shot. All optional except the shot.';
-      if (canAct && game.smoked) text = `Firing blind (Smoke Screen). ${text}`;
+      else if (game.barrageLanded) text = game.utilityPlayed
+        ? 'Your Delayed Barrage was this turn’s shot. End your turn when ready.'
+        : 'Your Delayed Barrage was this turn’s shot. You can still play one utility card, then end your turn.';
+      else if (game.attackPlayed && game.chain > 0) text = `Chain Shot: fire! A hit earns another shot (up to ${game.chain} more).`;
+      else if (game.attackPlayed && game.barrage[0] && game.barrage[0].turn === game.turnNumber) text = 'Barrage locked in. Now take your regular shot.';
+      else if (game.attackPlayed) text = `Double Salvo: ${plural(game.shotsLeft, 'shot')} left.`;
+      else if (game.utilityPlayed) text = 'Utility played. Now fire, or play an attack card instead of your shot.';
+      if (canAct && game.smoked) text = `Firing blind (Smoke Screen). ${text}`.trim();
     }
     el.cardHint.textContent = text;
     el.cardHint.classList.toggle('alert', !!(hint && hint.alert));
     el.cardRotateBtn.hidden = !(pending && (pending.key === 'parallel' || pending.key === 'recon' || pending.step === 'place'));
     el.cardCancelBtn.hidden = !pending;
-    el.endTurnBtn.hidden = !(canAct && game.jammed);
+    el.endTurnBtn.hidden = !(canAct && (game.jammed || game.barrageLanded));
   }
 
   function renderStatus() {
@@ -939,6 +1023,7 @@
       cls = 'your-turn';
       if (pending) text = `Your turn: ${CARDS[pending.key].name}`;
       else if (game.jammed) text = 'Your turn: guns offline (Software Bug)';
+      else if (game.barrageLanded) text = 'Your turn: barrage landed';
       else if (game.smoked) text = 'Your turn: firing blind (Smoke Screen)';
       else if (game.shotsLeft > 1) text = `Your turn: ${game.shotsLeft} shots left`;
       else text = 'Your turn: fire on enemy waters';
@@ -954,9 +1039,9 @@
     el.app.className = game.phase === 'setup' ? 'phase-setup' : 'phase-battle';
     const battle = game.phase === 'battle';
     const yourMove = battle && game.turn === 0 && !busy;
-    const ownFocus = yourMove && pending && ['own-cell', 'own-ship', 'origin', 'place'].includes(pending.step);
+    const ownFocus = yourMove && pending && ['own-cell', 'own-ship', 'place'].includes(pending.step);
     // Glow the board you should be looking at.
-    const gunsOffline = game.jammed && !pending; // Software Bug: nothing to aim at
+    const gunsOffline = noShotThisTurn() && !pending; // Software Bug or a landed barrage: nothing to aim at
     el.enemyWrap.className = `board-wrap${yourMove && !ownFocus && !gunsOffline ? ' active targeting' : ''}`;
     el.playerWrap.className = `board-wrap${ownFocus ? ' active targeting' : battle && !yourMove ? ' active defending' : ''}`;
     renderBoards();
@@ -988,20 +1073,17 @@
   function closeModal() { el.modal.hidden = true; }
 
   function showHelp() {
-    const group = (kind) => CARD_ORDER.filter((k) => CARDS[k].kind === kind)
-      .map((k) => `<li><strong>${CARDS[k].icon} ${CARDS[k].name}:</strong> ${CARDS[k].desc}</li>`).join('');
     const fleet = FLEET.map((s) => `${s.name} (${s.size})`).join(', ');
     openModal('How to play', `
       <p>Hide your fleet, then take turns firing at the enemy grid. Sink every enemy ship before they sink yours.</p>
       <ul>
         <li><strong>Fleet:</strong> ${fleet}.</li>
         <li><strong>Cards:</strong> both players draw from one shared deck. You start with ${DECK.startHand} cards and draw 1 at the start of every turn. You can hold at most ${DECK.handMax}; with a full hand you skip the draw.</li>
-        <li><strong>Your turn:</strong> optionally play one utility card, then optionally one attack card, then take your regular shot, which ends the turn. Utility cards can’t be played after an attack. Care Package is free at any point.</li>
+        <li><strong>Your turn:</strong> optionally play one utility card, then either take your regular shot or play one attack card instead. Either one ends your turn. Care Package doesn’t count toward the limits.</li>
         <li><strong>Comeback draw:</strong> when one of your ships is sunk, you draw a bonus card.</li>
       </ul>
-      <p class="help-group">Attack cards</p><ul>${group('attack')}</ul>
-      <p class="help-group">Utility cards</p><ul>${group('utility')}${group('free')}</ul>
-      <p>Shortcuts: <kbd>R</kbd> rotates (deployment, Move, Backup, Decoy, Mine Field, Parallel Shots, Recon Flight), <kbd>1</kbd>–<kbd>${DECK.handMax}</kbd> pick a card, and <kbd>Esc</kbd> cancels.</p>
+      <p>Hover over a card in your hand to read what it does.</p>
+      <p>Shortcuts: <kbd>R</kbd> or the mouse wheel rotates (deployment, Move, Backup, Decoy, Mine Field, Parallel Shots, Recon Flight), <kbd>1</kbd>–<kbd>${DECK.handMax}</kbd> pick a card, and <kbd>Esc</kbd> cancels.</p>
     `, [{ label: 'Got it', primary: true, onClick: closeModal }]);
   }
 

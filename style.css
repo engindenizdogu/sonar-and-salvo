@@ -205,9 +205,9 @@ kbd {
 main {
   max-width: 1340px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 16px 24px 12px;
   display: grid;
-  gap: 20px;
+  gap: 14px;
 }
 
 /* Console plate: matte paint with a machined bevel */
@@ -355,6 +355,16 @@ main {
   background: var(--scope-deep);
 }
 
+/* Torpedo aiming: row numbers you can fire along light up; others dim */
+#enemyBoard .label.row-pick {
+  color: var(--scope-deep);
+  background: var(--neon);
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(61, 255, 138, 0.6);
+}
+#enemyBoard .label.row-pick:hover, #enemyBoard .label.row-hot { background: #b8ffd2; }
+#enemyBoard .label.row-off { opacity: 0.3; }
+
 .cell {
   position: relative;
   background: var(--scope);
@@ -444,10 +454,6 @@ main {
 .cell.ship.moving::before { opacity: 0.3; }
 .cell.eligible { cursor: pointer; }
 .cell.eligible:not(.ship) { box-shadow: inset 0 0 0 2px var(--neon); }
-.cell.lane { background: rgba(98, 226, 148, 0.1); }
-/* Torpedo launch point: wins over ship bands (e.g. a shielded ship) so it's always visible. */
-#playerBoard .cell.origin, #enemyBoard .cell.origin { box-shadow: inset 0 0 0 2px var(--energy); background: rgba(240, 178, 58, 0.22); }
-.cell.origin:not(.hit)::after { content: '➤'; color: var(--energy); font-size: 13px; z-index: 3; }
 .cell.picked { background: rgba(239, 90, 58, 0.22) !important; box-shadow: inset 0 0 0 2px var(--hit); }
 .cell.picked::after { content: '✕'; color: var(--hit); font-weight: 700; font-size: 14px; z-index: 3; }
 .fx-shield { animation: ripple 0.6s ease-out forwards; border: 2px solid var(--shield); }
@@ -524,6 +530,14 @@ main {
 .hand.chooser .card-face { position: relative; height: 100%; }
 .hand.chooser .card-desc { -webkit-line-clamp: unset; display: block; }
 
+/* Delayed Barrage target cells: amber on enemy waters (yours), pulsing red on your waters (theirs) */
+.cell.incoming { outline: 2px dashed var(--energy); outline-offset: -4px; }
+.cell.incoming::before { content: '✛'; position: absolute; inset: 0; display: grid; place-items: center; color: var(--energy); font-size: 15px; z-index: 3; }
+.cell.ship.incoming::before { content: ''; } /* keep the hull drawing on your own ships */
+.cell.incoming.by-enemy { outline: 2px solid var(--hit); outline-offset: -3px; animation: incoming-blink 0.9s ease-in-out infinite; }
+.cell.incoming.by-enemy:not(.ship)::before { color: var(--hit); }
+@keyframes incoming-blink { 50% { background-color: rgba(239, 90, 58, 0.4); } }
+
 /* Sonar pings */
 .ping {
   pointer-events: none;
@@ -576,13 +590,10 @@ main {
 /* Hand of cards: stamped metal tags                                   */
 /* ------------------------------------------------------------------ */
 
-.card-panel { display: flex; flex-direction: column; gap: 14px; justify-self: center; width: min(100%, 860px); }
-.card-head { display: flex; align-items: baseline; justify-content: center; gap: 8px 22px; flex-wrap: wrap; }
-.deck-info { display: flex; gap: 14px; flex-wrap: wrap; font: 400 13px var(--font-mono); color: var(--muted); }
-.deck-info b { color: var(--text); font-weight: 400; }
+.card-panel { display: flex; flex-direction: column; gap: 8px; justify-self: center; width: min(100%, 860px); padding: 10px 18px 12px; }
 
-/* Top padding leaves room for the selected card to rise without covering the header */
-.hand { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding-top: 46px; }
+/* Raised and hovered cards may rise over the grids above, so the hand needs little top padding */
+.hand { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding-top: 6px; }
 .hand-empty { margin: 0; padding: 18px; width: 100%; color: var(--muted); font-size: 14px; border: 1px dashed var(--plate-edge); border-radius: var(--radius); text-align: center; }
 
 /* The <button> is a fixed-size slot in the hand; .card-face is the card itself.
@@ -591,8 +602,8 @@ main {
   --kind: var(--console);
   --kind-ink: var(--phosphor);
   position: relative;
-  width: 136px;
-  height: 190px;
+  width: 128px;
+  height: 178px;
   padding: 0;
   border: 0;
   background: none;
@@ -640,8 +651,8 @@ main {
 /* Art window: a little radar screen with the card's glyph */
 .card-art {
   display: grid; place-items: center;
-  height: 58px;
-  margin: 6px 8px 8px;
+  height: 52px;
+  margin: 6px 8px 7px;
   background:
     linear-gradient(rgba(98, 226, 148, 0.12) 1px, transparent 1px) 0 0 / 11px 11px,
     linear-gradient(90deg, rgba(98, 226, 148, 0.12) 1px, transparent 1px) 0 0 / 11px 11px,
@@ -687,7 +698,7 @@ main {
   #hand .card:hover .card-face,
   #hand .card:focus-visible .card-face {
     z-index: 30;
-    transform: translateY(-16px) scale(1.4);
+    transform: translateY(calc(-1 * var(--lift, 16px))) scale(1.4);
     filter: none; opacity: 1;
     overflow: visible;
     box-shadow: inset 0 0 0 3px #f3f5f7, inset 0 0 0 4px var(--kind), 0 18px 34px rgba(18, 25, 32, 0.4);
@@ -699,7 +710,7 @@ main {
 /* Held in the hand: on wide screens with a mouse, cards overlap and fan out along an arc.
    --fan is the card's offset from the middle (…, -1, 0, 1, …), set by ui.js. */
 @media (hover: hover) and (min-width: 700px) {
-  #hand { gap: 0; padding: 46px 0 30px; }
+  #hand { gap: 0; padding: 8px 0 20px; }
   #hand .card {
     --fan: 0;
     margin-left: -26px;
@@ -718,7 +729,7 @@ main {
 
 /* Touch screens: no hover, so show more of the text up front */
 @media (hover: none) {
-  .card { height: 214px; }
+  .card { height: 204px; }
   .card-desc { -webkit-line-clamp: 4; }
 }
 
@@ -732,6 +743,21 @@ main {
 /* ------------------------------------------------------------------ */
 /* Log: a printout tape                                                */
 /* ------------------------------------------------------------------ */
+
+/* Card counts: a small readout under the log title */
+.game-info {
+  display: flex; gap: 6px; margin: 10px 0 0; padding: 0;
+}
+.game-info div {
+  flex: 1;
+  padding: 5px 8px;
+  background: linear-gradient(180deg, #0c2015, #143222);
+  border: 1px solid #4a535c;
+  border-radius: var(--radius);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6);
+}
+.game-info dt { font: 600 11px var(--font-display); color: #9fb8a9; }
+.game-info dd { margin: 0; font: 400 17px/1.2 var(--font-mono); color: var(--phosphor); text-shadow: 0 0 6px rgba(98, 226, 148, 0.5); }
 
 .log {
   list-style: none; margin: 12px 0 0; padding: 0 4px 0 0;
