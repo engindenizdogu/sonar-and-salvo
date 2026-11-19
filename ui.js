@@ -26,7 +26,20 @@
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const lineName = (line, index) => (line === 'row' ? `row ${index + 1}` : `column ${COLS[index]}`);
   const isHit = (r) => r.result === 'hit' || r.result === 'sunk' || r.result === 'decoy';
-  const KIND_LABEL = { attack: 'Attack · then your shot', utility: 'Utility · before attacks', free: 'Free · no limit', locked: 'Locked' };
+  const KIND_NAME = { attack: 'Attack', utility: 'Utility', free: 'Free', locked: 'Locked' };
+  const KIND_RULE = { attack: 'Then take your shot', utility: 'Play before attacks', free: 'Doesn’t count toward limits', locked: 'Can’t be played' };
+
+  // A playing-card face. The outer <button> is a fixed-size slot; the face inside can lift and zoom on hover.
+  function cardFace(key, corner, rule) {
+    const c = CARDS[key];
+    return `<span class="card-face">
+        <span class="card-band"><span class="card-kind">${KIND_NAME[c.kind]}</span><span class="card-key">${corner}</span></span>
+        <span class="card-art" aria-hidden="true"><span class="card-icon">${c.icon}</span></span>
+        <span class="card-name">${c.name}</span>
+        <span class="card-tag">${rule || KIND_RULE[c.kind]}</span>
+        <span class="card-desc">${c.desc}</span>
+      </span>`;
+  }
 
   // ---- state ---------------------------------------------------------
   let game, ai;
@@ -423,14 +436,11 @@
   function openChooser() {
     const fromDiscard = pending.key === 'salvage';
     const options = fromDiscard
-      ? [...new Set(game.discard.filter((k) => !S.SINGLE_USE.includes(k)))].map((k) => ({ key: k, target: { card: k }, note: `${game.discard.filter((d) => d === k).length} in discard` }))
+      ? [...new Set(game.discard.filter((k) => !S.SINGLE_USE.includes(k)))].map((k) => ({ key: k, target: { card: k }, note: `×${game.discard.filter((d) => d === k).length}` }))
       : game.hands[1].map((k, index) => ({ key: k, target: { index }, note: '' })).filter((o) => o.key !== 'cargoload');
     const cardsHTML = options.map((o, i) => {
       const c = CARDS[o.key];
-      return `<button class="card kind-${c.kind}" data-pick="${i}">
-        <div class="card-top"><span class="card-icon" aria-hidden="true">${c.icon}</span><span class="card-key">${o.note}</span></div>
-        <div class="card-name">${c.name}</div>
-        <div class="card-desc">${c.desc}</div></button>`;
+      return `<button class="card kind-${c.kind}" data-pick="${i}">${cardFace(o.key, o.note)}</button>`;
     }).join('');
     openModal(fromDiscard ? 'Salvage: take a card' : 'Spy Satellite: the enemy’s hand',
       `<p>${fromDiscard ? 'Pick a card from the discard pile to add to your hand.' : 'Pick one card to shuffle back into the deck.'}</p><div class="hand chooser">${cardsHTML}</div>`,
@@ -872,6 +882,7 @@
     const canAct = humanCanAct();
     const choosingReturn = pending && pending.key === 'carepackage';
     el.hand.innerHTML = '';
+    el.hand.classList.toggle('has-armed', !!pending && pending.key !== 'carepackage');
     if (!hand.length) {
       const empty = document.createElement('p');
       empty.className = 'hand-empty';
@@ -886,6 +897,7 @@
       const btn = document.createElement('button');
       btn.className = `card kind-${card.kind}`;
       btn.dataset.index = i;
+      btn.style.setProperty('--fan', String(i - (hand.length - 1) / 2)); // position from the middle of the fan
       const isArmed = !!pending && pending.handIndex === i;
       const isReturn = !!choosingReturn && !isArmed && !locked;
       const blocker = canAct ? game.cardBlocker(0, k) : 'Wait for your turn';
@@ -894,14 +906,7 @@
       btn.classList.toggle('armed', isArmed);
       btn.classList.toggle('return-target', isReturn);
       btn.title = btn.disabled && blocker ? blocker : '';
-      btn.innerHTML = `
-        <div class="card-top">
-          <span class="card-icon" aria-hidden="true">${card.icon}</span>
-          <span class="card-key">${i + 1}</span>
-        </div>
-        <div class="card-name">${card.name}</div>
-        <div class="card-tag">${locked ? `Locked · sinks in ${plural(turnsLeft, 'turn')}` : KIND_LABEL[card.kind]}</div>
-        <div class="card-desc">${card.desc}</div>`;
+      btn.innerHTML = cardFace(k, '', locked ? `Sinks in ${plural(turnsLeft, 'turn')}` : ''); // no number badge: keys 1–4 still work
       el.hand.appendChild(btn);
     });
 

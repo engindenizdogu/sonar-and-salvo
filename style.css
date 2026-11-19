@@ -36,6 +36,7 @@
   --hull-edge: #d3dbd6;
   --danger: #ff6a55;
   --shield: #8fd3ff;
+  --neon: #3dff8a;            /* selections */
 
   /* Legacy aliases used by a few rules */
   --sonar: var(--phosphor);
@@ -289,7 +290,7 @@ main {
   text-align: left;
 }
 .ship-pick:hover { border-color: var(--plate-shadow); }
-.ship-pick.selected { border-color: var(--console); background: #d2e3d6; box-shadow: inset 3px 0 0 var(--console); }
+.ship-pick.selected { border-color: #1a8f4c; background: #dff5e7; box-shadow: inset 4px 0 0 var(--neon), 0 0 0 2px var(--neon), 0 0 12px rgba(61, 255, 138, 0.55); }
 .ship-pick.placed { color: var(--muted); }
 .ship-pick.placed .blocks i { background: #9aa3ac; }
 .ship-pick .tag { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
@@ -429,20 +430,20 @@ main {
    Rocket Shield = blue band; a ship you can pick for a card (Move, Shield, Scrambler, Maintenance,
    Torpedo launch) = pulsing green band. */
 .cell.ship.shielded { --band: var(--shield); background: rgba(143, 211, 255, 0.2); }
-.cell.ship.eligible { --band: var(--phosphor); background: rgba(98, 226, 148, 0.18); animation: band-pulse 1.1s ease-in-out infinite; }
+.cell.ship.eligible { --band: var(--neon); background: rgba(61, 255, 138, 0.2); animation: band-pulse 1.1s ease-in-out infinite; }
 .cell.ship.shielded.h, .cell.ship.eligible.h { box-shadow: inset 0 2px 0 var(--band), inset 0 -2px 0 var(--band); }
 .cell.ship.shielded.v, .cell.ship.eligible.v { box-shadow: inset 2px 0 0 var(--band), inset -2px 0 0 var(--band); }
 .cell.ship.shielded.h.end-a, .cell.ship.eligible.h.end-a { box-shadow: inset 0 2px 0 var(--band), inset 0 -2px 0 var(--band), inset 2px 0 0 var(--band); }
 .cell.ship.shielded.h.end-b, .cell.ship.eligible.h.end-b { box-shadow: inset 0 2px 0 var(--band), inset 0 -2px 0 var(--band), inset -2px 0 0 var(--band); }
 .cell.ship.shielded.v.end-a, .cell.ship.eligible.v.end-a { box-shadow: inset 2px 0 0 var(--band), inset -2px 0 0 var(--band), inset 0 2px 0 var(--band); }
 .cell.ship.shielded.v.end-b, .cell.ship.eligible.v.end-b { box-shadow: inset 2px 0 0 var(--band), inset -2px 0 0 var(--band), inset 0 -2px 0 var(--band); }
-@keyframes band-pulse { 50% { background: rgba(98, 226, 148, 0.04); } }
+@keyframes band-pulse { 50% { background: rgba(61, 255, 138, 0.05); } }
 .cell.ship.scrambled::before {
   background-image: repeating-linear-gradient(135deg, rgba(14, 38, 24, 0.4) 0 3px, transparent 3px 7px), linear-gradient(180deg, var(--hull-edge), var(--hull));
 }
 .cell.ship.moving::before { opacity: 0.3; }
 .cell.eligible { cursor: pointer; }
-.cell.eligible:not(.ship) { box-shadow: inset 0 0 0 2px var(--phosphor); }
+.cell.eligible:not(.ship) { box-shadow: inset 0 0 0 2px var(--neon); }
 .cell.lane { background: rgba(98, 226, 148, 0.1); }
 /* Torpedo launch point: wins over ship bands (e.g. a shielded ship) so it's always visible. */
 #playerBoard .cell.origin, #enemyBoard .cell.origin { box-shadow: inset 0 0 0 2px var(--energy); background: rgba(240, 178, 58, 0.22); }
@@ -514,13 +515,14 @@ main {
   opacity: 0.9;
 }
 .fx-smoke { animation: ripple 0.8s ease-out forwards; background: radial-gradient(circle, rgba(168, 217, 184, 0.6), transparent 70%); }
-.card.kind-locked { --kind: #6b757f; background: repeating-linear-gradient(135deg, #cfd5da 0 8px, #c2c8ce 8px 16px); }
-.card.locked:disabled { opacity: 0.8; }
 
 /* Card chooser (Salvage, Spy Satellite) */
 .hand.chooser { margin-top: 4px; }
-.hand.chooser .card { animation: none; }
-.hand.chooser .card-key { border: none; padding: 0; }
+/* In the chooser the cards sit in normal flow and size to their full text */
+.hand.chooser { align-items: stretch; padding-top: 4px; }
+.hand.chooser .card { animation: none; height: auto; }
+.hand.chooser .card-face { position: relative; height: 100%; }
+.hand.chooser .card-desc { -webkit-line-clamp: unset; display: block; }
 
 /* Sonar pings */
 .ping {
@@ -579,50 +581,146 @@ main {
 .deck-info { display: flex; gap: 14px; flex-wrap: wrap; font: 400 13px var(--font-mono); color: var(--muted); }
 .deck-info b { color: var(--text); font-weight: 400; }
 
-.hand { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
-.hand .card { width: 186px; }
-@media (max-width: 520px) { .hand .card { width: calc(50% - 6px); } }
+/* Top padding leaves room for the selected card to rise without covering the header */
+.hand { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding-top: 46px; }
 .hand-empty { margin: 0; padding: 18px; width: 100%; color: var(--muted); font-size: 14px; border: 1px dashed var(--plate-edge); border-radius: var(--radius); text-align: center; }
 
+/* The <button> is a fixed-size slot in the hand; .card-face is the card itself.
+   The face is anchored to the slot's bottom so it can lift and grow upward without moving the layout. */
 .card {
   --kind: var(--console);
-  display: flex; flex-direction: column; gap: 6px;
-  text-align: left;
-  padding: 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--plate-edge);
-  border-left: 4px solid var(--kind);
-  background: linear-gradient(180deg, #f0f2f5, var(--plate-hi));
-  color: var(--text);
+  --kind-ink: var(--phosphor);
+  position: relative;
+  width: 136px;
+  height: 190px;
+  padding: 0;
+  border: 0;
+  background: none;
   font: inherit;
+  color: var(--text);
+  text-align: left;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 0 rgba(0, 0, 0, 0.12);
-  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
   animation: deal 0.3s ease-out;
 }
-.card.kind-attack { --kind: #c2442a; }
-.card.kind-utility { --kind: var(--console); }
-.card.kind-free { --kind: var(--amber); }
-.card:hover:not(:disabled) { background: #f7f9fb; transform: translateY(-2px); box-shadow: inset 0 1px 0 #fff, 0 6px 12px rgba(28, 36, 44, 0.2); }
-.card:disabled { cursor: not-allowed; opacity: 0.5; }
-.card:focus-visible { outline: 2px solid var(--kind); outline-offset: 2px; }
-.card.armed { background: #e3efe6; box-shadow: 0 0 0 2px var(--kind), 0 8px 16px rgba(28, 36, 44, 0.25); transform: translateY(-3px); }
-.card.return-target { border-style: dashed; border-color: var(--amber); }
-@keyframes deal { from { opacity: 0; transform: translateY(8px); } }
+.card.kind-attack { --kind: #b8432a; --kind-ink: #ff7a5c; }
+.card.kind-utility { --kind: var(--console); --kind-ink: var(--phosphor); }
+.card.kind-free { --kind: #b07a10; --kind-ink: var(--energy); }
+.card.kind-locked { --kind: #6b757f; --kind-ink: #aeb7c0; }
+/* 'translate' (not transform) so dealing composes with the fan's rotation */
+@keyframes deal { from { opacity: 0; translate: 0 24px; } }
 
-.card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.card-icon {
-  width: 30px; height: 30px; border-radius: var(--radius);
-  display: grid; place-items: center;
-  background: #cdd3d9;
-  border: 1px solid #b0b8c0;
-  color: var(--kind);
-  font-size: 16px;
+.card-face {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  min-height: 100%;
+  display: flex; flex-direction: column;
+  padding: 0 0 10px;
+  border-radius: 4px;
+  border: 1px solid var(--plate-shadow);
+  background: linear-gradient(180deg, #f3f5f7, #dde2e7);
+  /* inner frame, like a printed card border */
+  box-shadow: inset 0 0 0 3px #f3f5f7, inset 0 0 0 4px var(--kind), 0 2px 0 rgba(0, 0, 0, 0.12), 0 4px 10px rgba(28, 36, 44, 0.18);
+  transform-origin: 50% 100%;
+  transition: transform 0.16s ease-out, box-shadow 0.16s ease-out;
+  overflow: hidden;
 }
-.card-key { font: 400 12px var(--font-mono); color: var(--muted); border: 1px solid var(--plate-edge); border-radius: 1px; padding: 0 5px; }
-.card-name { font: 600 16px var(--font-display); }
-.card-tag { font: 600 12px var(--font-display); letter-spacing: 0.02em; color: var(--kind); }
-.card-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
+
+.card-band {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 4px 4px 0;
+  padding: 3px 7px;
+  background: var(--kind);
+  color: #f4f7f5;
+  font: 600 12px var(--font-display);
+  letter-spacing: 0.03em;
+}
+.card-key { font: 400 12px var(--font-mono); opacity: 0.9; }
+.card-key:empty { display: none; }
+
+/* Art window: a little radar screen with the card's glyph */
+.card-art {
+  display: grid; place-items: center;
+  height: 58px;
+  margin: 6px 8px 8px;
+  background:
+    linear-gradient(rgba(98, 226, 148, 0.12) 1px, transparent 1px) 0 0 / 11px 11px,
+    linear-gradient(90deg, rgba(98, 226, 148, 0.12) 1px, transparent 1px) 0 0 / 11px 11px,
+    radial-gradient(circle at 50% 50%, #21503a, var(--scope-deep) 75%);
+  border: 1px solid #2e353c;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.55);
+}
+.card-icon { font-size: 26px; line-height: 1; color: var(--kind-ink); text-shadow: 0 0 8px var(--kind-ink); }
+
+.card-name { padding: 0 10px; font: 700 15px/1.15 var(--font-display); }
+.card-tag { padding: 2px 10px 0; font: 600 11.5px var(--font-display); color: var(--kind); }
+.card-desc {
+  margin: 6px 10px 0;
+  font-size: 11.5px; line-height: 1.35; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.card:disabled { cursor: not-allowed; }
+.card:disabled .card-face { filter: saturate(0.25); opacity: 0.6; }
+.card.locked .card-face { background: repeating-linear-gradient(135deg, #e3e7eb 0 8px, #d3d9de 8px 16px); }
+.card.locked .card-face { opacity: 0.85; }
+.card:focus-visible { outline: none; }
+.card:focus-visible .card-face { box-shadow: inset 0 0 0 3px #f3f5f7, inset 0 0 0 4px var(--kind), 0 0 0 3px var(--console); }
+
+/* Selected (armed) card: lifted out of the hand, slightly enlarged, with a pulsing neon outline */
+.card.armed .card-face {
+  transform: translateY(-16px) scale(1.14);
+  border-color: #1a8f4c;
+  box-shadow: inset 0 0 0 3px #f3f5f7, inset 0 0 0 4px var(--kind),
+    0 0 0 3px var(--neon), 0 0 18px rgba(61, 255, 138, 0.75), 0 14px 26px rgba(18, 25, 32, 0.35);
+  animation: neon-pulse 1.6s ease-in-out infinite;
+}
+@keyframes neon-pulse {
+  50% { box-shadow: inset 0 0 0 3px #f3f5f7, inset 0 0 0 4px var(--kind),
+    0 0 0 3px var(--neon), 0 0 34px rgba(61, 255, 138, 0.95), 0 14px 26px rgba(18, 25, 32, 0.35); }
+}
+/* While a card is selected, the rest of the hand steps back */
+#hand.has-armed .card:not(.armed) .card-face { opacity: 0.5; filter: saturate(0.3); }
+.card.return-target .card-face { outline: 2px dashed var(--neon); outline-offset: 3px; box-shadow: inset 0 0 0 3px #f3f5f7, inset 0 0 0 4px var(--kind), 0 0 14px rgba(61, 255, 138, 0.6); }
+
+/* Desktop: hovering pops the card out of the hand, zoomed, with its full text */
+@media (hover: hover) {
+  #hand .card:hover .card-face,
+  #hand .card:focus-visible .card-face {
+    z-index: 30;
+    transform: translateY(-16px) scale(1.4);
+    filter: none; opacity: 1;
+    overflow: visible;
+    box-shadow: inset 0 0 0 3px #f3f5f7, inset 0 0 0 4px var(--kind), 0 18px 34px rgba(18, 25, 32, 0.4);
+  }
+  #hand .card:hover .card-desc,
+  #hand .card:focus-visible .card-desc { -webkit-line-clamp: unset; display: block; }
+}
+
+/* Held in the hand: on wide screens with a mouse, cards overlap and fan out along an arc.
+   --fan is the card's offset from the middle (…, -1, 0, 1, …), set by ui.js. */
+@media (hover: hover) and (min-width: 700px) {
+  #hand { gap: 0; padding: 46px 0 30px; }
+  #hand .card {
+    --fan: 0;
+    margin-left: -26px;
+    transform-origin: 50% 120%;
+    transform: translateY(calc(var(--fan) * var(--fan) * 6px)) rotate(calc(var(--fan) * 6deg));
+    transition: transform 0.18s ease-out;
+  }
+  #hand .card:first-child { margin-left: 0; }
+  /* Hovered card straightens, comes to the front and zooms (zoom itself is on .card-face) */
+  #hand .card:hover,
+  #hand .card:focus-visible { z-index: 30; transform: none; }
+  /* Selected card rises out of the fan, upright */
+  #hand .card.armed { z-index: 20; transform: none; }
+  #hand .card.armed:hover .card-face { animation: none; }
+}
+
+/* Touch screens: no hover, so show more of the text up front */
+@media (hover: none) {
+  .card { height: 214px; }
+  .card-desc { -webkit-line-clamp: 4; }
+}
 
 .card-foot { display: flex; align-items: center; justify-content: center; gap: 10px 16px; flex-wrap: wrap; }
 .card-hint { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.4em; max-width: 60ch; text-align: center; }
