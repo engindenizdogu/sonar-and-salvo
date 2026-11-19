@@ -2,6 +2,8 @@
 
 A browser-based naval battle card game. Hide your fleet, hunt the enemy's, and play cards from a shared deck to scout, strike, repair, and deceive. You play against a computer opponent.
 
+<img width="1585" height="848" alt="image" src="https://github.com/user-attachments/assets/0b6954f9-ac84-4e7d-9a90-9942c35443f6" />
+
 Plain HTML, CSS and JavaScript. No build step and no dependencies.
 
 ## Run it locally
