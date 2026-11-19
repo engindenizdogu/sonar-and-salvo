@@ -732,7 +732,10 @@
       if (shot === SHOT.SPOTTED) cls.push('spotted');
       if (pb.mineAt(r, c) !== -1) cls.push('mine');
       if (detonatedOwn.has(key(r, c))) cls.push('detonated');
-      if (eligible && eligible.has(key(r, c))) cls.push('eligible');
+      if (eligible && eligible.has(key(r, c))) {
+        cls.push('eligible');
+        if (pending.step === 'own-cell') cls.push('repairable'); // Field Repair: pulse the damaged segment
+      }
       if (pending && pending.step === 'aim' && pending.origin[0] === r && pending.origin[1] === c) cls.push('origin');
       cells.player[r][c].className = cls.join(' ');
     }
