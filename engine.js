@@ -83,7 +83,7 @@
     },
     minefield: {
       name: 'Mine Field', kind: 'utility', icon: '⁜',
-      desc: 'Lay a hidden 3×1 mine field on open water. The first enemy torpedo to cross it explodes there.',
+      desc: 'Lay a hidden vertical mine field (3 cells tall) on open water. The first enemy torpedo to cross it explodes there.',
     },
     seals: {
       name: 'Deploy the Seals', kind: 'utility', icon: '⚔',
@@ -115,7 +115,7 @@
     },
     smoke: {
       name: 'Smoke Screen', kind: 'utility', icon: '☁',
-      desc: 'During the enemy’s next turn their shot results are hidden from them until their following turn.',
+      desc: 'The enemy fires blind for their next 2 turns: their results stay hidden until the smoke lifts.',
     },
     trail: {
       name: 'Follow the Trail', kind: 'utility', icon: '⌕',
@@ -135,7 +135,7 @@
     },
     stone: {
       name: 'Skipping Stone', kind: 'attack', icon: '◌',
-      desc: 'Skim a row where you have a ship. It hits every other cell (A, C, E, G, I) and doesn’t stop on a hit. Mines can’t catch it.',
+      desc: 'Skim a row where you have a ship. It hits every other cell, starting at A or B, and doesn’t stop on a hit. Mines can’t catch it.',
     },
     // Not in the deck: what Heavy Cargo becomes once it lands in the enemy's hand.
     cargoload: {
@@ -150,6 +150,7 @@
     'bug', 'seals', 'spy', 'salvage', 'cargo', 'smoke', 'trail', 'carepackage',
   ];
   const CARGO_TURNS = 2;
+  const SMOKE_TURNS = 2; // how many of the enemy's turns a Smoke Screen blinds
 
   // Single-use cards: once played they stay in the discard pile for the rest of the game
   // (never reshuffled into the deck, can't be salvaged). Keeps games from dragging on.
@@ -212,10 +213,10 @@
     return { r: cr, c: cc, cells: [[cr - 1, cc - 1], [cr - 1, cc + 1], [cr + 1, cc - 1], [cr + 1, cc + 1]] };
   }
 
-  // Skipping Stone: every other cell of a row, starting at the row-number side (columns A, C, E, G, I).
-  function stoneCells(row) {
+  // Skipping Stone: every other cell of a row. offset 0 starts at A (A, C, E, G, I); offset 1 at B (B, D, F, H, J).
+  function stoneCells(row, offset = 0) {
     const cells = [];
-    for (let c = 0; c < SIZE; c += 2) cells.push([row, c]);
+    for (let c = offset ? 1 : 0; c < SIZE; c += 2) cells.push([row, c]);
     return cells;
   }
 
@@ -489,13 +490,19 @@
     }
 
     // Mines go on open, unmarked water only.
-    canPlaceMines(r, c, horizontal) {
-      return this.cellsFree(shipCells(MINEFIELD_SIZE, r, c, horizontal));
+    // Mine fields are always vertical: torpedoes run along rows, so a vertical field guards 3 rows.
+    canPlaceMines(r, c) {
+      return this.cellsFree(shipCells(MINEFIELD_SIZE, r, c, false));
     }
 
-    placeMines(r, c, horizontal) {
-      if (!this.canPlaceMines(r, c, horizontal)) return false;
-      this.mines.push({ cells: shipCells(MINEFIELD_SIZE, r, c, horizontal), active: true });
+    canPlaceMinesAnywhere() {
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (this.canPlaceMines(r, c)) return true;
+      return false;
+    }
+
+    placeMines(r, c) {
+      if (!this.canPlaceMines(r, c)) return false;
+      this.mines.push({ cells: shipCells(MINEFIELD_SIZE, r, c, false), active: true });
       return true;
     }
 
@@ -526,7 +533,7 @@
       this.recons = [[], []];        // recon flights player p made: { line, index, found, turn }
       this.bugNext = [false, false]; // player p loses their shot next turn (Software Bug)
       this.jammed = false;           // current player is bugged this turn
-      this.smokeNext = [false, false]; // player p's next turn is fought blind (Smoke Screen)
+      this.smokeTurns = [0, 0];      // how many more of player p's turns are fought blind (Smoke Screen)
       this.smoked = false;           // current player's results are hidden this turn
       this.trail = [false, false];   // player p has Follow the Trail armed
       this.barrage = [null, null];   // player p's Delayed Barrage, public: { cells, turn }
@@ -576,17 +583,17 @@
       this.barrageLanded = false;
       this.jammed = this.bugNext[this.turn];
       this.bugNext[this.turn] = false;
-      // Smoke from the previous turn lifts: show this player what they hit.
+      // Smoke Screen: blind while turns remain; once it lifts, show everything this player hit meanwhile.
+      this.smoked = this.smokeTurns[this.turn] > 0;
+      if (this.smoked) this.smokeTurns[this.turn]--;
       const fogged = this.boards[1 - this.turn].fog;
-      if (fogged.size) {
+      if (!this.smoked && fogged.size) {
         events.push({ type: 'smoke-clear', player: this.turn, cells: [...fogged].map((k) => [Math.floor(k / SIZE), k % SIZE]) });
         fogged.clear();
       }
-      this.smoked = this.smokeNext[this.turn];
-      this.smokeNext[this.turn] = false;
       this.draw(this.turn, events, 'turn');
       if (this.jammed) events.push({ type: 'jammed', player: this.turn });
-      if (this.smoked) events.push({ type: 'smoked', player: this.turn });
+      if (this.smoked) events.push({ type: 'smoked', player: this.turn, turnsLeft: this.smokeTurns[this.turn] });
       // A Delayed Barrage fired last turn lands now, before this player acts.
       const bar = this.barrage[this.turn];
       if (bar) {
@@ -639,7 +646,7 @@
       if (card.kind === 'attack' && this.barrageLanded) return 'Your Delayed Barrage was this turn’s attack';
       const own = this.boards[p];
       switch (key) {
-        case 'minefield': return own.randomSpot(MINEFIELD_SIZE) ? null : 'No open water left';
+        case 'minefield': return own.canPlaceMinesAnywhere() ? null : 'No open water left';
         case 'decoy': return own.randomSpot(DECOY_SHIP.size) ? null : 'No room for a decoy';
         case 'seals':
         case 'spy': return this.hands[1 - p].some((k) => k !== 'cargoload') ? null : 'The enemy has no cards to take';
@@ -647,7 +654,7 @@
         case 'trail': return this.trail[p] ? 'Follow the Trail is already armed' : null;
         case 'stone': {
           const opp = this.boards[1 - p];
-          return this.torpedoRows(p).some((r) => stoneCells(r).some(([a, b]) => opp.targetable(a, b)))
+          return this.torpedoRows(p).some((r) => [0, 1].some((o) => stoneCells(r, o).some(([a, b]) => opp.targetable(a, b))))
             ? null : 'No open water on your ships’ rows';
         }
         case 'torpedo': {
@@ -828,7 +835,7 @@
           return { ok: true, events };
         }
         case 'smoke': {
-          this.smokeNext[1 - p] = true;
+          this.smokeTurns[1 - p] = SMOKE_TURNS; // a second Smoke Screen resets it, it doesn't stack
           break;
         }
         case 'trail': {
@@ -836,7 +843,7 @@
           break;
         }
         case 'minefield': {
-          if (!own.placeMines(target.r, target.c, !!target.horizontal)) return fail('Mines need 3 cells of open, unmarked water');
+          if (!own.placeMines(target.r, target.c)) return fail('Mines need 3 cells of open, unmarked water in a column');
           break;
         }
         case 'decoy': {
@@ -929,10 +936,12 @@
         case 'stone': {
           const row = target.row;
           if (!this.torpedoRows(p).includes(row)) return fail('You can only skim a row where you have a ship');
-          const cells = stoneCells(row).filter(([a, b]) => opp.targetable(a, b));
-          if (!cells.length) return fail('Nothing left to hit on that row');
+          const offset = target.offset ? 1 : 0;
+          const cells = stoneCells(row, offset).filter(([a, b]) => opp.targetable(a, b));
+          if (!cells.length) return fail('Nothing left to hit on those cells of that row');
           strikes = cells.map(([a, b]) => this._strike(p, a, b)); // keeps going after hits; skims over mines
           ev.row = row;
+          ev.offset = offset;
           break;
         }
         case 'cluster': {
@@ -989,7 +998,7 @@
   }
 
   const api = {
-    SIZE, FLEET, BACKUP_SHIP, DECOY_SHIP, MINEFIELD_SIZE, CARGO_TURNS, SINGLE_USE, ONE_COPY, copiesOf, CARDS, CARD_ORDER, DECK, DECK_SIZE, SHOT, DIRS,
+    SIZE, FLEET, BACKUP_SHIP, DECOY_SHIP, MINEFIELD_SIZE, CARGO_TURNS, SMOKE_TURNS, SINGLE_USE, ONE_COPY, copiesOf, CARDS, CARD_ORDER, DECK, DECK_SIZE, SHOT, DIRS,
     Board, Game,
     sonarArea, clusterArea, parallelArea, barrageArea, stoneCells, ringArea, torpedoPath, lineCells, directionTo, shipCells, idx, inBounds,
   };

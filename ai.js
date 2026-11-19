@@ -199,16 +199,16 @@
     _bestMinefield() {
       const own = this.own;
       const cands = [];
-      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) for (const h of [true, false]) {
-        if (!own.canPlaceMines(r, c, h)) continue;
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+        if (!own.canPlaceMines(r, c)) continue; // always vertical
         let near = 0;
-        shipCells(MINEFIELD_SIZE, r, c, h).forEach(([a, bb]) => {
+        shipCells(MINEFIELD_SIZE, r, c, false).forEach(([a, bb]) => {
           [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dr, dc]) => {
             const s = inBounds(a + dr, bb + dc) ? own.shipAt(a + dr, bb + dc) : -1;
             if (s !== -1 && !own.ships[s].decoy && !own.isSunk(s)) near++;
           });
         });
-        cands.push({ r, c, horizontal: h, value: near + this.rng() });
+        cands.push({ r, c, value: near + this.rng() });
       }
       return this._argmax(cands);
     }
@@ -237,9 +237,9 @@
 
     _bestStone(score) {
       const cands = [];
-      for (const row of this.game.torpedoRows(this.p)) {
-        const v = this._sum(stoneCells(row), score);
-        if (v > 0) cands.push({ row, value: v });
+      for (const row of this.game.torpedoRows(this.p)) for (const offset of [0, 1]) {
+        const v = this._sum(stoneCells(row, offset), score);
+        if (v > 0) cands.push({ row, offset, value: v });
       }
       return this._argmax(cands);
     }

@@ -204,7 +204,7 @@
           : `Enemy Delayed Barrage locked on ${cellsText}. It lands after your turn: move or shield ships there!`;
       }
       case 'stone':
-        return `${mine ? 'Skipping Stone' : `Enemy Skipping Stone (they have a ship in that row)`} along row ${ev.row + 1}: ${strikeSummary(res)}.`;
+        return `${mine ? 'Skipping Stone' : `Enemy Skipping Stone (they have a ship in that row)`} along row ${ev.row + 1} from column ${ev.offset ? 'B' : 'A'}: ${strikeSummary(res)}.`;
       case 'torpedo': {
         const contact = res.find((r) => r.result !== 'miss');
         const water = plural(res.filter((r) => r.result === 'miss').length, 'cell');
@@ -240,7 +240,9 @@
       case 'cargo':
         return mine ? `Heavy Cargo dumped on the enemy: it blocks one of their hand slots for ${CARGO_TURNS} turns.` : `The enemy dumped Heavy Cargo on you: it blocks one hand slot for your next ${CARGO_TURNS} turns.`;
       case 'smoke':
-        return mine ? 'Smoke Screen deployed: the enemy fires blind next turn.' : 'Enemy laid a Smoke Screen: next turn you won’t see your shot results until the turn after.';
+        return mine
+          ? `Smoke Screen deployed: the enemy fires blind for their next ${S.SMOKE_TURNS} turns.`
+          : `Enemy laid a Smoke Screen: for your next ${S.SMOKE_TURNS} turns you won’t see your shot results until it lifts.`;
       case 'trail':
         return mine ? 'Follow the Trail armed: the next enemy hit on your fleet will give one of their ships away.' : 'Enemy armed Follow the Trail. Your next hit on them will reveal one of your ships.';
       case 'salvage':
@@ -288,7 +290,7 @@
         }
         case 'smoked':
           addLog(ev.player === 0
-            ? 'Smoke Screen! You fire blind this turn: results show at the start of your next turn.'
+            ? `Smoke Screen! You fire blind this turn${ev.turnsLeft ? ` and next turn` : ''}. Results show when the smoke lifts.`
             : 'The enemy is firing blind through your smoke.', ev.player === 0 ? 'you' : 'enemy', true);
           break;
         case 'smoke-clear': {
@@ -402,7 +404,7 @@
       rapid: () => `Pick ${rapidNeed()} cells in enemy waters (${pending.picks.length}/${rapidNeed()} chosen). Click a pick again to undo it.`,
       flare: () => 'Pick a cell in enemy waters to fire at. The 8 cells around it light up.',
       barrage: () => 'Pick the center of a 3×3 area in enemy waters. Its 4 corners are hit at the start of your next turn, and the enemy can see them.',
-      stone: () => 'Pick a row number on the enemy grid. Only rows where you have a ship. It hits columns A, C, E, G and I.',
+      stone: () => `Pick a row where you have a ship. Click a cell to start from its column (A or B pattern), or click the row number to start from ${pending.offset ? 'B' : 'A'} (R switches).`,
       torpedo: () => 'Pick a row number on the enemy grid. You can only fire along rows where you have a ship, so the enemy learns that row.',
       repair: () => 'Pick a damaged (pulsing) segment on your board.',
       maintenance: () => 'Pick a damaged ship on your board.',
@@ -413,7 +415,7 @@
         : `Choose a new spot for your ${game.boards[0].ships[pending.ship].name}. Press R to rotate. Cells the enemy has marked are off limits.`),
       backup: () => 'Choose where to deploy the 2×1 Patrol Boat on your board. Press R to rotate.',
       carepackage: () => 'Pick another card in your hand to send back to the deck.',
-      minefield: () => 'Choose open water on your board for the 3×1 mine field. Press R to rotate.',
+      minefield: () => 'Choose open water on your board for the mine field. It runs 3 cells down from where you click.',
       decoy: () => 'Choose where to hide the 2×1 Decoy on your board. Press R to rotate.',
       recon: () => `Pick a ${pending.horizontal ? 'row' : 'column'} in enemy waters to fly over. Press R to switch to ${pending.horizontal ? 'columns' : 'rows'}.`,
       salvage: () => 'Choose a card from the discard pile.',
@@ -484,9 +486,14 @@
     });
   }
 
+  // Can the pending card's placement or aim be turned? (Mine fields are always vertical.)
+  const canRotatePending = () => !!pending && (pending.key === 'parallel' || pending.key === 'recon' || pending.key === 'stone'
+    || (pending.step === 'place' && pending.key !== 'minefield'));
+
   function rotatePending() {
-    if (pending && (pending.key === 'parallel' || pending.key === 'recon' || pending.step === 'place')) {
-      pending.horizontal = !pending.horizontal;
+    if (canRotatePending()) {
+      if (pending.key === 'stone') pending.offset = pending.offset ? 0 : 1; // switch between starting at A and B
+      else pending.horizontal = !pending.horizontal;
       render();
       return true;
     }
@@ -555,7 +562,7 @@
     // Torpedo: click a row number (or any cell in that row)
     const rowLabel = e.target.closest('.row-label');
     if (rowLabel && humanCanAct() && pending && ROW_AIMED.includes(pending.key)) {
-      play({ row: Number(rowLabel.dataset.row) });
+      play({ row: Number(rowLabel.dataset.row), offset: pending.offset ? 1 : 0 });
       return;
     }
     const pos = cellFromEvent(e);
@@ -579,7 +586,7 @@
       } else if (pending.key === 'parallel') {
         play({ r, c, horizontal: pending.horizontal });
       } else if (ROW_AIMED.includes(pending.key)) {
-        play({ row: r });
+        play({ row: r, offset: c % 2 }); // Skipping Stone starts from the clicked cell's column pattern
       } else if (pending.key === 'recon') {
         play(pending.horizontal ? { line: 'row', index: r } : { line: 'col', index: c });
       } else {
@@ -590,7 +597,7 @@
 
   el.enemyBoard.addEventListener('mouseover', (e) => {
     const rowLabel = e.target.closest('.row-label');
-    const pos = rowLabel ? [Number(rowLabel.dataset.row), 0] : cellFromEvent(e);
+    const pos = rowLabel ? [Number(rowLabel.dataset.row), -1] : cellFromEvent(e); // column -1 = the row number itself
     if (pos && (!hoverEnemy || pos[0] !== hoverEnemy[0] || pos[1] !== hoverEnemy[1])) {
       hoverEnemy = pos;
       renderBoards();
@@ -607,9 +614,9 @@
     let canRotate = false;
     if (board === 'player') {
       canRotate = (game.phase === 'setup' && selectedShip !== null)
-        || (humanCanAct() && !!pending && pending.step === 'place');
+        || (humanCanAct() && canRotatePending() && pending.step === 'place');
     } else {
-      canRotate = humanCanAct() && !!pending && (pending.key === 'parallel' || pending.key === 'recon');
+      canRotate = humanCanAct() && !!pending && (pending.key === 'parallel' || pending.key === 'recon' || pending.key === 'stone');
     }
     if (!canRotate || Math.abs(e.deltaY) + Math.abs(e.deltaX) < 1) return;
     e.preventDefault();
@@ -707,7 +714,7 @@
         return { cells: S.shipCells(board.ships[pending.ship].size, r, c, h), ok: board.canMove(pending.ship, r, c, h) };
       }
       if (pending.key === 'minefield') {
-        return { cells: S.shipCells(MINEFIELD_SIZE, r, c, h), ok: board.canPlaceMines(r, c, h), mine: true };
+        return { cells: S.shipCells(MINEFIELD_SIZE, r, c, false), ok: board.canPlaceMines(r, c), mine: true };
       }
       return { cells: S.shipCells(BACKUP_SHIP.size, r, c, h), ok: board.canAddShip(r, c, h) };
     }
@@ -750,8 +757,9 @@
     const [r, c] = hoverEnemy;
     let aim;
     if (pending.key === 'sonar') return { aim: S.sonarArea(r, c).cells, picks, ok: true };
+    if (c < 0 && !ROW_AIMED.includes(pending.key)) return { aim: [], picks, ok: true }; // hovering a row number
     if (pending.key === 'stone') {
-      const lane = S.stoneCells(r);
+      const lane = S.stoneCells(r, c < 0 ? (pending.offset ? 1 : 0) : c % 2);
       return { aim: lane, picks, ok: game.torpedoRows(0).includes(r) && lane.some(open) };
     }
     if (pending.key === 'flare') return { aim: [[r, c], ...S.ringArea(r, c)], picks, ok: open([r, c]) };
@@ -1001,14 +1009,30 @@
       else if (game.attackPlayed && game.barrage[0] && game.barrage[0].turn === game.turnNumber) text = 'Barrage locked in. Now take your regular shot.';
       else if (game.attackPlayed) text = `Double Salvo: ${plural(game.shotsLeft, 'shot')} left.`;
       else if (game.utilityPlayed) text = 'Utility played. Now fire, or play an attack card instead of your shot.';
-      if (canAct && game.smoked) text = `Firing blind (Smoke Screen). ${text}`.trim();
+      if (canAct && game.smoked) text = `Firing blind (Smoke Screen${game.smokeTurns[0] ? ', 1 more turn after this' : ', last turn'}). ${text}`.trim();
       if (canAct && !text && hand.length >= DECK.handMax) text = `Your hand is full (${DECK.handMax}/${DECK.handMax}). Play a card or you'll skip your next draw.`;
     }
     el.cardHint.textContent = text;
     el.cardHint.classList.toggle('alert', !!(hint && hint.alert));
-    el.cardRotateBtn.hidden = !(pending && (pending.key === 'parallel' || pending.key === 'recon' || pending.step === 'place'));
+    // Turn messages that change what you can do get the prominent notice style
+    const notice = canAct && !pending && (noShotThisTurn() || game.smoked || hand.length >= DECK.handMax);
+    el.cardHint.classList.toggle('notice', !!(notice || (hint && hint.alert)));
+    el.cardRotateBtn.hidden = !canRotatePending();
     el.cardCancelBtn.hidden = !pending;
     el.endTurnBtn.hidden = !(canAct && (game.jammed || game.barrageLanded));
+  }
+
+  function renderNotice() {
+    const notice = el.enemyBoard.querySelector('.board-notice');
+    if (!notice) return;
+    let title = '', sub = '';
+    if (humanCanAct() && !pending) {
+      if (game.jammed) { title = 'Guns offline'; sub = 'Software Bug: no shots or attack cards this turn'; }
+      else if (game.barrageLanded) { title = 'Barrage landed'; sub = 'That was this turn’s shot. End your turn when ready'; }
+    }
+    notice.hidden = !title;
+    notice.querySelector('strong').textContent = title;
+    notice.querySelector('span').textContent = sub;
   }
 
   function renderStatus() {
@@ -1031,7 +1055,10 @@
       text = 'Enemy is maneuvering…';
     }
     el.status.textContent = text;
-    el.status.className = `status ${cls}`;
+    // Amber, blinking readout when something stops you from firing normally
+    const blocked = game.phase === 'battle' && game.turn === 0 && !busy && (noShotThisTurn() || game.smoked);
+    el.status.className = `status ${cls}${blocked ? ' alert' : ''}`;
+    renderNotice();
   }
 
   function render() {
@@ -1041,8 +1068,10 @@
     const ownFocus = yourMove && pending && ['own-cell', 'own-ship', 'place'].includes(pending.step);
     // Glow the board you should be looking at.
     const gunsOffline = noShotThisTurn() && !pending; // Software Bug or a landed barrage: nothing to aim at
-    el.enemyWrap.className = `board-wrap${yourMove && !ownFocus && !gunsOffline ? ' active targeting' : ''}`;
-    el.playerWrap.className = `board-wrap${ownFocus ? ' active targeting' : battle && !yourMove ? ' active defending' : ''}`;
+    // Smoke Screen: the grid a blinded player fires at goes gray until the smoke lifts
+    const smokeOn = (p) => battle && (game.smokeTurns[p] > 0 || (game.turn === p && game.smoked) || game.boards[1 - p].fog.size > 0);
+    el.enemyWrap.className = `board-wrap${yourMove && !ownFocus && !gunsOffline ? ' active targeting' : ''}${smokeOn(0) ? ' smoky' : ''}`;
+    el.playerWrap.className = `board-wrap${ownFocus ? ' active targeting' : battle && !yourMove ? ' active defending' : ''}${smokeOn(1) ? ' smoky' : ''}`;
     renderBoards();
     if (game.phase === 'setup') renderShipyard();
     renderFleet(el.playerFleet, game.boards[0], true);
@@ -1082,7 +1111,7 @@
         <li><strong>Comeback draw:</strong> when one of your ships is sunk, you draw a bonus card.</li>
       </ul>
       <p>Hover over a card in your hand to read what it does.</p>
-      <p>Shortcuts: <kbd>R</kbd> or the mouse wheel rotates (deployment, Move, Backup, Decoy, Mine Field, Parallel Shots, Recon Flight), <kbd>1</kbd>–<kbd>${DECK.handMax}</kbd> pick a card, and <kbd>Esc</kbd> cancels.</p>
+      <p>Shortcuts: <kbd>R</kbd> or the mouse wheel rotates (deployment, Move, Backup, Decoy, Parallel Shots, Recon Flight, and Skipping Stone’s start column), <kbd>1</kbd>–<kbd>${DECK.handMax}</kbd> pick a card, and <kbd>Esc</kbd> cancels.</p>
     `, [{ label: 'Got it', primary: true, onClick: closeModal }]);
   }
 
@@ -1109,6 +1138,12 @@
   // ---- boot ----------------------------------------------------------------
   buildBoard(el.playerBoard, cells.player);
   buildBoard(el.enemyBoard, cells.enemy);
+  // A notice stamped across enemy waters when you can't fire this turn
+  const enemyNotice = document.createElement('div');
+  enemyNotice.className = 'board-notice';
+  enemyNotice.hidden = true;
+  enemyNotice.innerHTML = '<strong></strong><span></span>';
+  el.enemyBoard.appendChild(enemyNotice);
   newGame();
 
   let seenHelp = false;

@@ -42,7 +42,7 @@ You can also just open `index.html` directly in a browser.
 | Chain Shot | Attack | Fire a shot. Every hit earns another shot, up to 3 in total. A miss ends the chain. |
 | Flare Round | Attack | Fire one shot. The 8 cells around it light up, showing which hold a ship (you can then target them) and which are water. |
 | Delayed Barrage | Attack | Target the 4 corners of a 3×3 area. Both players see the 4 cells. You still take your regular shot this turn; the barrage lands at the start of your next turn and is that turn's shot (you can still play a utility card). The enemy gets one turn to move or shield ships there. |
-| Skipping Stone | Attack | Like the Torpedo, pick a row where you have a ship. It hits columns A, C, E, G and I, doesn't stop on a hit, and skims over mines. |
+| Skipping Stone | Attack | Like the Torpedo, pick a row where you have a ship. It hits every other cell, starting at A (A, C, E, G, I) or B (B, D, F, H, J): click a cell to use its column's pattern, or click the row number and press R to switch. It doesn't stop on a hit and skims over mines. |
 | Torpedo | Attack | Pick a row number on the enemy grid. You can only choose rows where one of your ships sits, so the enemy learns that row. The torpedo runs the whole row from left to right and strikes the first intact enemy segment (or a mine). |
 | Cluster Bomb | Attack | Strike a plus-shaped area of up to 5 cells. |
 | Rapid Fire | Attack | Choose 4 cells anywhere and fire at all of them. |
@@ -56,17 +56,17 @@ You can also just open `index.html` directly in a browser.
 | Scrambler | Utility | Enemy sonar can't detect this ship until it is sunk. |
 | Recon Flight | Utility | Fly over a full row or column of enemy waters and learn whether any intact ship segment is there (yes/no). Unlike Sonar, Scrambler doesn't hide ships from it. |
 | Decoy | Utility | Place a hidden 2×1 fake ship. Hits on it look real until it's destroyed and revealed. It doesn't count toward the win. |
-| Mine Field | Utility | Lay a hidden 3×1 mine field on open water. The first enemy torpedo to cross it explodes there, and the field is used up. Normal shots ignore mines. |
+| Mine Field | Utility | Lay a hidden vertical mine field (3 cells tall) on open water. Torpedoes run along rows, so it guards 3 rows. The first enemy torpedo to cross it explodes there, and the field is used up. Normal shots ignore mines. |
 | Software Bug | Utility | On their next turn the enemy can't fire or play attack cards. They can still play a utility card, then end their turn. |
 | Deploy the Seals | Utility | A random card from the enemy's hand is shuffled back into the deck. |
 | Spy Satellite | Utility | See the enemy's hand and choose one card to shuffle back into the deck. |
 | Salvage | Utility | Take any card of your choice from the discard pile. |
 | Heavy Cargo | Utility | Dump it into the enemy's hand. It takes up one of their 4 slots (so they may skip draws) for their next 2 turns, then sinks. It can't be played, sent back, or taken by Seals/Spy Satellite. |
-| Smoke Screen | Utility | During the enemy's next turn their shot results are hidden from them. They see a "?" until their following turn. Sinking a ship is still announced. |
+| Smoke Screen | Utility | The enemy fires blind for their next 2 turns: their shot results show as "?" and are revealed when the smoke lifts, at the start of their third turn. Sinking a ship is still announced. A second Smoke Screen resets the 2 turns rather than adding to them. |
 | Follow the Trail | Utility | A trap that stays armed until the enemy next hits one of your real ships. Then one intact segment of a random enemy ship is revealed to you. |
 | Care Package | Free, no limit | Shuffle another card from your hand back into the deck and draw a new one. |
 
-**Shortcuts:** <kbd>1</kbd>–<kbd>4</kbd> pick a card, <kbd>R</kbd> or the mouse wheel (over the grid) rotates or switches orientation (deployment, Move, Backup, Decoy, Mine Field, Parallel Shots, Recon Flight), and <kbd>Esc</kbd> cancels.
+**Shortcuts:** <kbd>1</kbd>–<kbd>4</kbd> pick a card, <kbd>R</kbd> or the mouse wheel (over the grid) rotates or switches orientation (deployment, Move, Backup, Decoy, Parallel Shots, Recon Flight, Skipping Stone start column), and <kbd>Esc</kbd> cancels.
 
 ## Project structure
 
