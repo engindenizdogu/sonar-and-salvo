@@ -54,6 +54,8 @@
 * { box-sizing: border-box; }
 
 html, body { margin: 0; }
+/* Reserve the scrollbar's space so the page never shifts sideways when its height changes */
+html { scrollbar-gutter: stable; }
 
 body {
   min-height: 100vh;
@@ -593,8 +595,9 @@ main {
 .card-panel { display: flex; flex-direction: column; gap: 8px; justify-self: center; width: min(100%, 860px); padding: 10px 18px 12px; }
 
 /* Raised and hovered cards may rise over the grids above, so the hand needs little top padding */
-.hand { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding-top: 6px; }
-.hand-empty { margin: 0; padding: 18px; width: 100%; color: var(--muted); font-size: 14px; border: 1px dashed var(--plate-edge); border-radius: var(--radius); text-align: center; }
+/* --card-h is shared by the cards and the empty-hand message, so the hand never changes height */
+.hand { --card-h: 178px; display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding-top: 6px; }
+.hand-empty { margin: 0; padding: 18px; width: 100%; height: var(--card-h); display: grid; place-items: center; color: var(--muted); font-size: 14px; border: 1px dashed var(--plate-edge); border-radius: var(--radius); text-align: center; }
 
 /* The <button> is a fixed-size slot in the hand; .card-face is the card itself.
    The face is anchored to the slot's bottom so it can lift and grow upward without moving the layout. */
@@ -603,7 +606,7 @@ main {
   --kind-ink: var(--phosphor);
   position: relative;
   width: 128px;
-  height: 178px;
+  height: var(--card-h, 178px);
   padding: 0;
   border: 0;
   background: none;
@@ -611,13 +614,13 @@ main {
   color: var(--text);
   text-align: left;
   cursor: pointer;
-  animation: deal 0.3s ease-out;
 }
 .card.kind-attack { --kind: #b8432a; --kind-ink: #ff7a5c; }
 .card.kind-utility { --kind: var(--console); --kind-ink: var(--phosphor); }
 .card.kind-free { --kind: #b07a10; --kind-ink: var(--energy); }
 .card.kind-locked { --kind: #6b757f; --kind-ink: #aeb7c0; }
 /* 'translate' (not transform) so dealing composes with the fan's rotation */
+.card.is-new { animation: deal 0.3s ease-out; }
 @keyframes deal { from { opacity: 0; translate: 0 24px; } }
 
 .card-face {
@@ -729,11 +732,11 @@ main {
 
 /* Touch screens: no hover, so show more of the text up front */
 @media (hover: none) {
-  .card { height: 204px; }
+  .hand { --card-h: 204px; }
   .card-desc { -webkit-line-clamp: 4; }
 }
 
-.card-foot { display: flex; align-items: center; justify-content: center; gap: 10px 16px; flex-wrap: wrap; }
+.card-foot { display: flex; align-items: center; justify-content: center; gap: 10px 16px; flex-wrap: wrap; min-height: 44px; }
 .card-hint { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.4em; max-width: 60ch; text-align: center; }
 .card-hint.alert { color: #8a5a00; font-weight: 600; }
 .card-actions { display: flex; gap: 8px; }

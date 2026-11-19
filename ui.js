@@ -52,6 +52,7 @@
   let generation = 0;        // invalidates pending AI timers on restart
   let hint = null;           // { text, alert }
   const pingsShown = [0, 0];
+  let lastHand = [];         // previous hand, so only newly dealt cards animate in
 
   const cells = { player: [], enemy: [] };
 
@@ -113,6 +114,7 @@
     hint = null;
     hoverPlayer = hoverEnemy = null;
     pingsShown[0] = pingsShown[1] = 0;
+    lastHand = [];
     el.log.innerHTML = '';
     closeModal();
     render();
@@ -121,11 +123,9 @@
   function startBattle() {
     if (!game.boards[0].allPlaced()) return;
     ai = new S.AI(game, 1);
-    const events = game.start(0);
+    game.start(0);
     selectedShip = null;
     addLog('Battle stations. You have the first shot.', 'you');
-    const opening = events.filter((e) => e.type === 'draw' && e.player === 0).map((e) => CARDS[e.card].name);
-    addLog(`Your opening hand: ${opening.join(', ')}.`, 'you');
     render();
   }
 
@@ -177,11 +177,25 @@
       case 'chain':
         return mine ? 'Chain Shot loaded: every hit earns another shot, up to 3.' : 'Enemy loads a Chain Shot.';
       case 'flare': {
-        const ships = (ev.revealed || []).filter((x) => x.ship).length;
-        const lit = (ev.revealed || []).length;
-        if (!mine) return `Enemy Flare Round on ${coord(ev.r, ev.c)}: ${res[0] && res[0].result !== 'miss' ? 'a hit, and ' : ''}${plural(ships, 'of your ship segments')} lit up.`;
-        if (ev.smoked) return `Flare Round on ${coord(ev.r, ev.c)}: the shot is lost in the smoke, but the flare lights ${plural(lit, 'cell')}.`;
-        return `Flare Round on ${coord(ev.r, ev.c)}: ${res[0].result === 'miss' ? 'splash.' : 'hit!'} The flare lights ${plural(lit, 'cell')}: ${plural(ships, 'ship segment')} spotted.`;
+        const revealed = ev.revealed || [];
+        const ships = revealed.filter((x) => x.ship).length;
+        const water = revealed.length - ships;
+        const at = coord(ev.r, ev.c);
+        const shot = res[0] ? res[0].result : 'miss';
+        if (!mine) {
+          const outcome = { miss: 'splash', blocked: 'your shield deflects it', hit: 'it hits', sunk: 'it hits', decoy: 'it hits your Decoy' }[shot] || 'splash';
+          const exposed = ships
+            ? `${ships} of your ship segment${ships === 1 ? '' : 's'} around it ${ships === 1 ? 'is' : 'are'} now spotted`
+            : 'none of your ships around it were exposed';
+          return `Enemy Flare Round on ${at}: ${outcome}, and ${exposed}.`;
+        }
+        const outcome = ev.smoked
+          ? 'the shot is lost in the smoke'
+          : ({ miss: 'splash', blocked: 'deflected by a Rocket Shield (a ship is there)', hit: 'hit', sunk: 'hit', decoy: 'hit' }[shot] || 'splash');
+        const light = revealed.length
+          ? `The flare lights ${plural(revealed.length, 'new cell')}: ${plural(ships, 'ship segment')} spotted, ${water} water.`
+          : 'The cells around it were already charted.';
+        return `Flare Round on ${at}: ${outcome}. ${light}`;
       }
       case 'barrage': {
         const cellsText = ev.cells.map(([r, c]) => coord(r, c)).join(', ');
@@ -249,34 +263,13 @@
       });
 
       switch (ev.type) {
-        case 'shot': {
-          const r = ev.results[0];
-          const at = coord(r.r, r.c);
-          const verb = actor === 0 ? 'You fire at' : 'Enemy fires at';
-          if (actor === 0 && ev.smoked && r.result !== 'sunk') addLog(`${verb} ${at}: lost in the smoke.`, who);
-          else if (r.result === 'miss') addLog(`${verb} ${at}: splash.`, who);
-          else if (r.result === 'blocked') addLog(actor === 0 ? `${verb} ${at}: deflected by a Rocket Shield. There's a ship there!` : `${verb} ${at}: your ${r.shipName}'s shield holds.`, who);
-          else addLog(actor === 0 ? `${verb} ${at}: hit!${ev.chained ? ' Chain Shot: fire again.' : ''}` : `${verb} ${at}: your ${r.shipName} is hit!${ev.chained ? ' The chain continues.' : ''}`, who);
-          break;
-        }
+        case 'shot':
+          break; // regular shots aren't logged: the grids already show them
         case 'card':
           addLog(cardMessage(ev, actor === 0), who);
           break;
-        case 'draw': {
-          const mine = ev.player === 0;
-          if (ev.skipped) {
-            if (mine) addLog(`Your hand is full (${DECK.handMax}), so you skip a draw.`, 'you');
-            break;
-          }
-          if (ev.reason === 'sunk') {
-            sunkLines.push([mine ? `You draw a bonus card for your loss: ${CARDS[ev.card].name}.` : 'The enemy draws a bonus card for their loss.', mine ? 'you' : 'enemy']);
-          } else if (mine && ev.reason === 'carepackage') {
-            addLog(`Care Package delivers: ${CARDS[ev.card].name}.`, 'you');
-          } else if (mine && ev.reason === 'turn') {
-            addLog(`You draw ${CARDS[ev.card].name}.`, 'you');
-          }
-          break;
-        }
+        case 'draw':
+          break; // draws aren't logged: new cards show up in your hand (a full hand is flagged under the cards)
         case 'jammed':
           addLog(ev.player === 0
             ? 'Software Bug! Your guns are offline this turn. You can still play one utility card, then end your turn.'
@@ -970,6 +963,7 @@
       el.hand.appendChild(empty);
     }
     let cargoSeen = 0;
+    const previous = lastHand.slice();
     hand.forEach((k, i) => {
       const card = CARDS[k];
       const locked = card.kind === 'locked';
@@ -978,6 +972,9 @@
       btn.className = `card kind-${card.kind}`;
       btn.dataset.index = i;
       btn.style.setProperty('--fan', String(i - (hand.length - 1) / 2)); // position from the middle of the fan
+      const seen = previous.indexOf(k);
+      if (seen >= 0) previous.splice(seen, 1); // already held: no deal animation
+      else btn.classList.add('is-new');
       const isArmed = !!pending && pending.handIndex === i;
       const isReturn = !!choosingReturn && !isArmed && !locked;
       const blocker = canAct ? game.cardBlocker(0, k) : 'Wait for your turn';
@@ -989,6 +986,7 @@
       btn.innerHTML = cardFace(k, '', locked ? `Sinks in ${plural(turnsLeft, 'turn')}` : ''); // no number badge: keys 1–4 still work
       el.hand.appendChild(btn);
     });
+    lastHand = hand.slice();
 
     let text = hint ? hint.text : pending ? instructions() : '';
     if (!text && game.phase === 'battle') {
@@ -1004,6 +1002,7 @@
       else if (game.attackPlayed) text = `Double Salvo: ${plural(game.shotsLeft, 'shot')} left.`;
       else if (game.utilityPlayed) text = 'Utility played. Now fire, or play an attack card instead of your shot.';
       if (canAct && game.smoked) text = `Firing blind (Smoke Screen). ${text}`.trim();
+      if (canAct && !text && hand.length >= DECK.handMax) text = `Your hand is full (${DECK.handMax}/${DECK.handMax}). Play a card or you'll skip your next draw.`;
     }
     el.cardHint.textContent = text;
     el.cardHint.classList.toggle('alert', !!(hint && hint.alert));
