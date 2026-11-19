@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sonar &amp; Salvo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>Sonar <span>&amp;</span> Salvo</h1>
+    </div>
+    <div id="status" class="status" role="status" aria-live="polite">Deploy your fleet</div>
+    <div class="topbar-actions">
+      <button id="helpBtn" class="btn ghost">How to play</button>
+      <button id="restartBtn" class="btn ghost">New game</button>
+    </div>
+  </header>
+
+  <main id="app" class="phase-setup">
+    <!-- Setup -->
+    <section id="setupPanel" class="panel setup-panel" aria-label="Fleet deployment">
+      <h2>Deploy your fleet</h2>
+      <p class="hint">Pick a ship, then click your grid to place it. Press <kbd>R</kbd> or use Rotate to turn it. Click a placed ship to pick it back up.</p>
+      <ul id="shipyard" class="shipyard"></ul>
+      <div class="setup-actions">
+        <button id="rotateBtn" class="btn">Rotate <kbd>R</kbd></button>
+        <button id="randomBtn" class="btn">Randomize</button>
+        <button id="clearBtn" class="btn">Clear</button>
+      </div>
+      <button id="startBtn" class="btn primary" disabled>Start battle</button>
+    </section>
+
+    <!-- Boards -->
+    <section class="theater">
+      <div class="board-wrap" id="playerWrap">
+        <div class="board-head">
+          <h2>Your waters</h2>
+          <ul class="fleet-status" id="playerFleet" aria-label="Your fleet"></ul>
+        </div>
+        <div class="board" id="playerBoard" aria-label="Your board"></div>
+      </div>
+
+      <div class="board-wrap" id="enemyWrap">
+        <div class="board-head">
+          <h2>Enemy waters</h2>
+          <ul class="fleet-status" id="enemyFleet" aria-label="Enemy fleet"></ul>
+        </div>
+        <div class="board" id="enemyBoard" aria-label="Enemy board"></div>
+      </div>
+    </section>
+
+    <!-- Hand of cards -->
+    <section id="cardPanel" class="panel card-panel" aria-label="Your hand">
+      <div class="card-head">
+        <h2>Your hand</h2>
+        <div class="deck-info">
+          <span>Deck <b id="deckCount">0</b></span>
+          <span>Discard <b id="discardCount">0</b></span>
+          <span>Enemy hand <b id="enemyHand">0</b></span>
+        </div>
+      </div>
+      <div id="hand" class="hand"></div>
+      <div class="card-foot">
+        <p id="cardHint" class="card-hint"></p>
+        <div class="card-actions">
+          <button id="cardRotateBtn" class="btn" hidden>Rotate <kbd>R</kbd></button>
+          <button id="cardCancelBtn" class="btn" hidden>Cancel <kbd>Esc</kbd></button>
+          <button id="endTurnBtn" class="btn primary" hidden>End turn</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Log -->
+    <section class="panel log-panel" aria-label="Battle log">
+      <h2>Battle log</h2>
+      <ol id="log" class="log"></ol>
+    </section>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h2 id="modalTitle"></h2>
+      <div id="modalBody"></div>
+      <div class="modal-actions" id="modalActions"></div>
+    </div>
+  </div>
+
+  <script src="engine.js"></script>
+  <script src="ai.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>
