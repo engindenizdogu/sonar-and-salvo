@@ -394,6 +394,20 @@ main {
 .cell.ship.v.end-b::before { bottom: 8%; clip-path: polygon(0 0, 100% 0, 100% 85%, 70% 100%, 30% 100%, 0 85%); }
 .cell.ship.sunk::before { background: var(--sunk); }
 
+/* Your own grid is mirrored (columns run J..A, row numbers on the right) so column A faces the enemy
+   grid. Enemy torpedoes and skipping stones run from column A, so they now sweep in from the enemy's
+   side. direction: rtl flips the grid placement; contents stay left-to-right, and horizontal hull
+   ends and decoy outlines are swapped to match. */
+#playerBoard { direction: rtl; }
+#playerBoard > * { direction: ltr; }
+#playerBoard .cell.ship.h.end-a::before { left: -1px; right: 8%; clip-path: polygon(65% 0, 0 0, 0 100%, 65% 100%, 100% 50%); }
+#playerBoard .cell.ship.h.end-b::before { left: 8%; right: -1px; clip-path: polygon(100% 0, 15% 0, 0 30%, 0 70%, 15% 100%, 100% 100%); }
+#playerBoard .cell.ship.decoy.h::before { border-left: 2px dashed var(--hull-edge); border-right: 2px dashed var(--hull-edge); }
+#playerBoard .cell.ship.decoy.h:not(.end-b)::before { border-left: none; }
+#playerBoard .cell.ship.decoy.h:not(.end-a)::before { border-right: none; }
+#playerBoard .cell.ship.decoy.sunk::before { border-color: var(--miss); }
+#playerBoard .recon.row .recon-tag { right: auto; left: -4px; }
+
 /* Shot markers: radar blips */
 .cell.miss::after {
   content: '';

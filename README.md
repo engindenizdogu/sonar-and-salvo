@@ -45,7 +45,7 @@ You can also just open `index.html` directly in a browser.
 | Flare Round | Attack | Fire one shot. The 8 cells around it light up, showing which hold a ship (you can then target them) and which are water. |
 | Delayed Barrage | Attack | Target the 4 corners of a 3×3 area. Both players see the 4 cells. You still take your regular shot this turn; the barrage lands at the start of your next turn and is that turn's shot (you can still play a utility card). The enemy gets one turn to move or shield ships there. |
 | Skipping Stone | Attack | Like the Torpedo, pick a row where you have a ship. It hits every other cell, starting at A (A, C, E, G, I) or B (B, D, F, H, J): click a cell to use its column's pattern, or click the row number and press R to switch. It doesn't stop on a hit and skims over mines. |
-| Torpedo | Attack | Pick a row number on the enemy grid. You can only choose rows where one of your ships sits, so the enemy learns that row. The torpedo runs the whole row from left to right and strikes the first intact enemy segment (or a mine). |
+| Torpedo | Attack | Pick a row number on the enemy grid. You can only choose rows where one of your ships sits, so the enemy learns that row. The torpedo runs the whole row starting at column A (on your own grid, which is mirrored, that is the edge facing the enemy) and strikes the first intact enemy segment (or a mine). |
 | Cluster Bomb | Attack | Strike a plus-shaped area of up to 5 cells. |
 | Rapid Fire | Attack | Choose 4 cells anywhere and fire at all of them. |
 | Parallel Shots | Attack | Fire a straight 3×1 line, horizontal or vertical. |
